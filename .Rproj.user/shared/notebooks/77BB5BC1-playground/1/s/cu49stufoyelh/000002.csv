@@ -1,0 +1,112 @@
+"0","```r
+folder <- 'C:\\Projects\\FuelMoisture\\data\\modis\\MCD64CMQ\\C6\\'
+files <- dir_ls(folder, glob = '*.hdf')
+foobar <- list()
+
+#foo %>% rasterToPoints() %>% as_tibble() %>% rename(long = 1, lat = 2, burnedArea = 3) %>% arrange(long, lat) %>% tail(500) %>% mutate(long = (long / 4) - 0.125, lat = (lat / 4) - 0.125) %>% view()
+
+for (i in 1:length(files)) {
+  # pull temporary date from filename
+  tmp_date <- as.Date( substr( files[i], 59, 65), '%Y%j')
+  # 1. extract burned area layer from HDF4 format
+  # list of subdatasets
+  # 0: burned area
+  # 1: QA
+  # 2: unmapped fraction
+  # 3: land cover distribution
+  foobar[[i]] <- get_subdatasets(paste0( files[i] ) )[1] %>%
+    # transform from HDF4 to raster format
+    raster() %>%
+    # transform to matrix and then tibble
+    rasterToPoints() %>%
+    as_tibble() %>%
+    # rename columns to fit our usual format
+    rename(long = 1, lat = 2, burnedArea = 3) %>%
+    # transform grid numbers to WGS84 coordinates 
+    # need to keep in mind the +- 0.125 might be the wrong direction
+    mutate(long = (long / 4) + 0.125 - 180, 
+           lat = (lat / 4) + 0.125 - 90,
+           # create month and year columns
+           month = lubridate::month( tmp_date ),
+           year = lubridate::year( tmp_date ))
+}  
+  
+foobar <- bind_rows(foobar)
+
+tmp <- monthsDry %>%
+  left_join(foobar, by = c('long', 'lat', 'month'))
+
+tmp2 <- tmp %>%
+  group_by(lat, long, year) %>%
+  filter(burnedArea > 0) %>%
+  summarise(burnedArea = sum(burnedArea)) %>%
+  ungroup()
+
+# original method: writing a tif from each burned layer (fuck that!)
+#for (i in 1:length(files)) {
+#  # extract year & day for record
+#  file_name <- paste0(
+#    './input/modis/burned_area/tif/modis_ba_', 
+#    substr(files[i], 59, 65),
+#    '.tif'
+#  )
+#  
+#  # list of subdatasets
+#  # 0: burned area -- the only one we need
+#  # 1: QA
+#  # 2: unmapped fraction
+#  # 3: land cover distribution
+#  foo <- get_subdatasets( paste0( files[i] ) )[1]
+#  
+#  # write a tif
+#  gdal_translate(foo, dst_dataset = file_name)
+#  
+#  rm(foo)
+#}
+
+##### later steps, resampling the slightly-off BA resolution to match everything else
+### long range: -179.75 : 180
+### lat range: -54.5 : 70
+tmp_hotspot <- vroom('./input/_modis_burnedArea.csv.gz') %>%
+  filter(year >= 2002) %>%
+  # revert long-lat to original coordinates
+  mutate(long = long - 0.125,
+         lat = lat - 0.125)
+
+# create template raster
+x <- raster(xmn = -180, #min(tmp_hotspot$long), 
+            xmx = 180, #max(tmp_hotspot$long), 
+            ymn = -90, #min(tmp_hotspot$lat), 
+            ymx = 90, #max(tmp_hotspot$lat), 
+            res = 0.25, 
+            crs = \"+proj=longlat +datum=WGS84\")
+
+template <- raster::raster('C:\\Projects\\FuelMoisture\\data\\reanalysis\\precipitation\\era5_precip_19792018_mean.tif') 
+
+foobar <- list()
+
+for (i in 2002:2018) {
+  tic(paste0('Resampling burned area for year ', i))
+  
+  foo <- tmp_hotspot %>%
+    filter(year == i)
+  
+  bar <- rasterize(foo[, c('long', 'lat')], 
+                   x, 
+                   foo[, 'burnedArea'], 
+                   fun = 'first')
+  
+  baz <- resample(bar, template, method = \"ngb\") %>%
+    rasterToPoints() %>%
+    as_tibble() %>%
+    rename(long = 1, lat = 2, burnedArea = 3) %>%
+    mutate(year = i)
+  
+  foobar[[i]] <- baz
+  toc()
+}
+
+foobar <- bind_rows(foobar)
+
+vroom_write(foobar, './input/_modis_burnedArea_resample.csv.gz')
+```"

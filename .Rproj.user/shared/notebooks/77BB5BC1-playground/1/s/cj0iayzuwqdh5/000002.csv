@@ -1,0 +1,109 @@
+"0","```r
+library(cffdrs)
+library(tidyverse)
+library(lubridate)
+library(broom) # glance + augment
+library(modelr) # add_residuals + add_predictions
+library(rworldmap) # getMap
+library(cowplot)
+library(vroom)
+library(fs)
+library(eddi)
+library(devtools)
+library(plotly)
+library(RColorBrewer)
+#devtools::source_gist(\"00772ccea2dd0b0f1745\", filename = \"000_geom_bag.r\")
+#devtools::source_gist(\"00772ccea2dd0b0f1745\", filename = \"001_bag_functions.r\")
+#devtools::install_github(\"earthlab/eddi\") # maybe -- if we look into using EDDI
+
+library(sf)
+library(sp)
+library(raster)
+library(rgdal)
+library(rgeos)
+library(leaflet)
+library(mapview)
+library(maptools)
+library(rasterVis)
+library(reshape2)
+library(inlabru) # gg()
+
+library(h5)
+library(ncdf4)
+library(hdf5r)
+library(gdalUtils)
+library(lwgeom)
+
+library(mgcv) # gam
+library(nlme) # lme
+
+library(trend) # sens.slope
+library(zyp) # zyp.sen
+
+### functions
+ktf <- function(x) {
+  (x -273.15) * 9/5 + 32
+}
+
+#no longer needed
+#gdal_chooseInstallation(hasDrivers=\"HDF5\")
+#getOption(\"gdalUtils_gdalPath\")[[
+#  gdal_chooseInstallation(hasDrivers=\"HDF5\")]]$version
+
+data(test_fbp)
+data(test_fwi)
+world_sf <- st_as_sf(getMap(resolution = 'low'))
+
+### Palettes
+# random colors
+pal_vapor1 <- c('#ff71ce', '#01cdfe', '#05ffa1', '#b967ff', '#fffb96')
+# neon pink-blue-turq
+pal_neon <- c('#ff00c1', '#9600ff', '#4900ff', '#00b8ff', '#00fff9')
+# pink-turq-blue
+pal_vapor2 <- c('#FF6AD5', '#C774E8', '#AD8CFF', '#8795E8', '#94D0FF')
+# sunset
+pal_sunset <- c('#feda84', '#ff9b83', '#976393', '#685489', '#43457f')
+# pastel sad
+pal_sad <- c('#d0b9e4', '#e1abd4', '#b583b8', '#a253a1', '#88c7bc')
+# pastel
+pal_pastel <- c('#cbffe6', '#afe9ff', '#bfb9ff', '#ffcfea', '#feffbe')
+# arizona tea
+pal_tea <- c('#fc78b7', '#fd9bca', '#ffffff', '#74f6e8', '#9387f7')
+# sunrise
+pal_sunrise <- c('#ffa3ac', '#ffae97', '#ffba81', '#ffc56c', '#ffd156')
+# cyberpunk neons
+pal_cyberneon <- c('#51e6ff', '#00ccfd', '#fd34b2', '#1bf913', '#1f0f47')
+# cyberpunk muted
+pal_cybermute <- c('#18030e', '#7b1346', '#c13268', '#32c18b', '#73c2d0')
+# cyberpunk 2019
+pal_cyber19 <- c('#0c4383', '#22a0b6', '#00ff9f', '#7b1346', '#cb0c59')
+# cyberpunk dark neon
+pal_cyberpunk <- c('#711c91', '#ea00d9', '#0abdc6', '#133e7c', '#091833')
+# cyberpunk drab
+pal_cyberdrab <- c('#9c9c9c', '#6d6d6d', '#633200', '#7e0000', '#000000')
+# cyberpunk synth
+pal_cybersynth <- c('#00ff9f', '#00b8ff', '#001eff', '#bd00ff', '#d600ff')
+# cyberpunk drab 2 -- 3-4 colors blend together....
+pal_cyberdrab2 <- c('#467fa1', '#54295c', '#061f2b', '#1e0f1d', '#5e0b0b')
+# halloweenpunk
+pal_halloween <- c('#ea7c4c', '#94f66d', '#56d465', '#845dc1', '#6834ab')
+# pink to punk
+pal_pinkpunk <- c('#00ff8f', '#4da57e', '#767c79', '#b44c7a', '#c83073')
+# moth punk
+pal_mothpunk <- c('#103f54', '#3a7068', '#affbba', '#d055bc', '#7e429f')
+# fallpunk
+pal_fall <- c('#f58169', '#f2ba91', '#b8a082', '#65a186', '#3e7d75')
+# lolipop punk
+pal_lolipop <- c('#fca7e0', '#ad3ebd', '#b2c6f7', '#4c4c4c', '#000000')
+
+pal_neuromancer <- c('#fd34b2','#1f0f47', '#51e6ff')
+pal_neuromancer_b <- c('#fd34b2','#000000', '#51e6ff')
+pal_greeneyes <- c('#fd34b2', '#1f0f47', '#1bf913')
+pal_greeneyes_b <- c('#fd34b2', '#000000', '#1bf913')
+
+pal_utas <- c(\"#E32412\", \"#F3786D\", \"#F7A49E\",
+              \"#595959\", \"#808080\", \"#BFBFBF\", 
+              \"#bf0813\", \"d8d8d8\")
+
+
+```"

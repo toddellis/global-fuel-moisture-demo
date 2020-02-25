@@ -5,8 +5,8 @@ account: tootstorm
 server: shinyapps.io
 hostUrl: https://api.shinyapps.io/v1
 appId: 1858644
-bundleId: 2827138
+bundleId: 2827427
 url: https://tootstorm.shinyapps.io/global-fuel-moisture-demo/
-when: 1582611200.93573
+when: 1582621825.79568
 asMultiple: FALSE
 asStatic: FALSE

@@ -1,0 +1,123 @@
+"0","```r
+##### bypass all data creation above from ncdf-complete!!!
+fmc_ann <- read_csv('C:\\Projects\\FuelMoisture\\data\\analysis\\shiny\\fmc\\input\\fmc_annual.csv') 
+fmc_mon <- read_csv('C:\\Projects\\FuelMoisture\\data\\analysis\\shiny\\fmc\\fmc_monthly.csv') 
+
+ggplot(fmc_csv %>% 
+               filter(date == '1980-01-01', 
+                      !is.na(fmc)), 
+       aes(x = long, y = lat))+
+    geom_sf(data = filter(world_sf, 
+                          SOVEREIGNT == 'Australia', 
+                          TYPE == 'Country'), 
+            aes(x = LON, y = LAT), 
+            fill = 'grey60', color = 'black', 
+            size = 0.5/.pt, alpha = 0.9)  + 
+  geom_point(shape = 'square', color = 'white', size = 3) + 
+  geom_point(data = fmc, 
+             aes(x = long, y = lat, color = ecoID), 
+             shape = 'square', size = 3) + 
+  theme_void() + 
+  theme(plot.background = element_rect(fill = \"grey10\"))
+
+fmc %>%
+#  ggplot(aes(x = year, y = fmc_ds, color = fmc_ds)) + 
+  ggplot(aes(x = year, y = fmc_ds * 100)) + 
+  theme_minimal_grid() +
+  theme(axis.text.x = element_text(size = 11)) + 
+  scale_x_continuous(breaks = c(1980, 1990, 2000, 2010)) + 
+  geom_jitter(alpha = 0.05) +
+  geom_line(se = F, stat = \"smooth\", method = \"lm\", formula = y ~ splines::bs(x, 3), 
+            alpha = 0.8, color = 'hotpink', size = 1.75) + 
+#  geom_line(se = F, stat = \"smooth\", method = \"lm\", alpha = 0.6, color = 'black', size = 1) + 
+  scale_color_viridis_c(option = 'B', direction = 1) + 
+  labs(x = 'Year', y = 'Percent', subtitle = 'Proportion of 3-month dry season < 8% FMC') +
+  facet_grid((abs(lat - lat %% 3)) ~ (long - long %% 10))
+
+fmc %>% 
+  filter(long >= 145, lat <= -41) %>%
+  ggplot(aes(x = as.factor(year), y = fmc_ds)) + 
+  theme_minimal_grid() + 
+  geom_boxplot() + 
+  geom_jitter(alpha = 0.01) + 
+  theme(axis.text.x = element_text(angle = -90, hjust = 1)) +
+  stat_summary(fun.y = mean, shape = 23, geom = \"point\") + 
+  facet_grid(abs(lat) ~ long)
+#  facet_grid((abs(lat - lat %% 5)) ~ (long - long %% 10))
+
+fmc %>%
+  ggplot(aes(x = long, y = lat, color = fmc_ds)) +
+  geom_sf(data = filter(world_sf, 
+                        SOVEREIGNT == 'Australia', 
+                        TYPE == 'Country'), 
+          aes(x = LON, y = LAT), 
+          fill = 'white', color = 'black', 
+          size = 0.5/.pt, alpha = 0.9) +
+  geom_point(size = 3, shape = 'square', alpha = 0.15) +
+  scale_color_viridis_c(option = 'B', direction = 1) + 
+  theme_minimal_grid() + 
+  ylim(-44, -10) + xlim(113, 154) +
+  #ylim(-43, -25) + xlim(140, 154) +
+  labs(x = 'Longitude', y = 'Latitude', color = 'Proportion \n< threshold',
+       subtitle = '') + 
+  facet_wrap(~decade)
+
+fmc %>%
+#  ggplot(aes(x = year, y = fmc_ds, color = fmc_ds)) + 
+  ggplot(aes(x = year, y = fmc_ds * 100, color = ecoID)) + 
+  theme_minimal_grid() +
+  theme(axis.text.x = element_text(size = 11)) + 
+  scale_x_continuous(breaks = c(1980, 1990, 2000, 2010)) + 
+  geom_jitter(alpha = 0.05) +
+  geom_line(se = F, stat = \"smooth\", method = \"lm\", formula = y ~ splines::bs(x, 3), 
+            alpha = 0.8, size = 1.75) + 
+#  geom_line(se = F, stat = \"smooth\", method = \"lm\", alpha = 0.6, color = 'black', size = 1) + 
+  #scale_color_viridis_c(option = 'B', direction = 1) + 
+  labs(x = 'Year', y = 'Percent', subtitle = 'Proportion of 3-month dry season < 8% FMC') +
+  facet_grid((abs(lat - lat %% 3)) ~ (long - long %% 10))
+
+fmc %>%
+  filter(stateID %in% c('NSW', 'TAS'), year >= 2010) %>%
+#  ggplot(aes(x = year, y = fmc_ds, color = fmc_ds)) + 
+  ggplot(aes(x = year, y = fmc_ds * 100)) + 
+  theme_minimal_grid() +
+  theme(axis.text.x = element_text(size = 11),
+        legend.position = 'bottom',
+        strip.text.x = element_text(size = 5, face = \"bold\")) + 
+  scale_x_continuous(breaks = c(1980, 1990, 2000, 2010)) + 
+  geom_jitter(alpha = 0.05) +
+  geom_line(aes(group = as.factor(abs(lat - lat %% 5))), color = 'grey20', se = F, stat = \"smooth\", method = \"lm\", 
+            alpha = 0.6, size = 1.5) + 
+#  geom_line(aes(color = as.factor(abs(lat - lat %% 5))), se = F, stat = \"smooth\", method = 'loess', 
+#            alpha = 0.8, size = 1.75) + 
+  geom_line(aes(color = as.factor(abs(lat - lat %% 5))), se = F, stat = \"smooth\", method = \"lm\", formula = y ~ splines::bs(x, 3), 
+            alpha = 0.8, size = 1.75) + 
+  scale_color_viridis_d(option = 'B', direction = 1) + 
+  labs(x = 'Year', y = 'Percent', color = 'Latitudinal \ngradient', 
+       subtitle = 'Proportion of 3-month dry season < 8% FMC') +
+  facet_grid(stateID ~ ecoID)
+
+### playground
+#foo <- raster('input/temp_ffmc2016_fmctransform_1.tif') %>%
+#  raster::rotate() # transform 0-360 to -180-180
+
+# foo %>% writeRaster('temp_ffmc2016_fmctransform_1_rotate.tif')
+
+#foo <- read_csv('input/ecoregion_gfed97to16_fmc20160101.csv')
+
+#foo %>% 
+#  ggplot(aes(x = fmccount, y = fmcmean, color = WWF_MHTNAM)) + 
+#  geom_point(alpha = 0.3) + 
+#  geom_smooth(method = 'lm') + 
+#  geom_hline(yintercept = 10) + 
+#  scale_x_log10() + 
+#  facet_wrap(~WWF_MHTNAM)
+
+### possible tools to extract and portray as geospatial pixels
+tmp <- fmc %>% 
+  filter(year == 2013) %>% 
+  dplyr::select(long, lat, fmc_prop)
+tmp2 <- SpatialPixelsDataFrame(tmp[c('long', 'lat')], tmp)
+ggplot() + gg(tmp2, aes(x = long, y = lat, fill = fmc_prop))
+
+```"

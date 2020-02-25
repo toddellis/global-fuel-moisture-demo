@@ -1,0 +1,32 @@
+"0","```r
+##### Summary stats from GFED dataset for geological and ecological regions
+
+### Australian geology
+geol <- read_csv('input/geology_zsfire_1997to2016.csv') %>%
+  select(-stratno, -typename, -type_uri, -repage_uri, -yngage_uri,
+         -oldage_uri, -replth_uri, -source, -metadata, -frame, 
+         -resscale, -captdate, -moddate, -featureid, -geolunitid,
+         -shape_leng, -shape_area) %>%
+  filter(!is.na(zscount))
+
+geol %>%
+  filter(zscount > 1) %>%
+  group_by(mapsymbol) %>%
+  add_tally() %>%
+  filter(n >= 30) %>%
+  ggplot(aes(x = mapsymbol, y = (zssum + 1), color = zscount, size = zscount)) +
+  geom_boxplot(alpha = 0.5) +
+  geom_jitter(alpha = 0.5) +
+  scale_y_log10() + coord_flip()
+
+geol %>%
+  filter(zscount > 1) %>%
+  ggplot(aes(x = area, y = (zsrange + 1), size = zscount)) +
+  geom_point(alpha = 0.4) +
+  scale_y_log10() + 
+  scale_x_log10() + 
+  geom_line(stat = 'smooth', method = 'loess', se = F, alpha = 0.7, color = 'grey50', size = 1)
+
+### NSW-clipped ecoregions
+
+```"

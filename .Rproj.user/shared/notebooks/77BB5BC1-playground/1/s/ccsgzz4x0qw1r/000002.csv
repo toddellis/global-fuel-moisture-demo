@@ -1,0 +1,277 @@
+"0","```r
+### Concatenate folder of csvs
+ffmc_dir <- 'C:/Projects/FuelMoisture/data/reanalysis/ffmc/'  
+fmc_ls <- list.files(path = ffmc_dir, pattern = '^.*\\.(csv)$')
+fmc_csv <- Reduce(rbind, lapply(paste0(ffmc_dir, fmc_ls), read_csv)) %>%
+  mutate(month = month(date),
+         yearx = year - min(year),
+         decade = paste0(year - (year %% 10), 's'),
+         yearLag = ifelse(month(date) == 12, year + 1, year),
+         yearxLag = yearLag - min(yearLag)) %>% 
+  filter(decade != '1970s')
+
+fmc_csv <- read_csv('C:/Projects/FuelMoisture/data/reanalysis/ffmc/ffmc_2018_global.csv') %>% # largest file -- not sure if these may have different lat-longs?
+  mutate(month = month(date),
+         long = ifelse(long > 180, long - 360, long))
+
+fmc_pnw <- list.files('C:/Projects/FuelMoisture/data/reanalysis/ffmc/done/PNW/', 
+                      '.csv', 
+                      full.names = T) %>%
+  map(function(x) { read_csv(x) }) %>%
+  reduce( rbind)
+
+#write_csv(fmc_pnw, 'fmc_pnw.csv')
+
+### getting months of lowest precipitation using ERA5 reanalysis data
+## CDO steps outside R using Cygnis shell
+## Find monthly means
+# cdo ymonmean C:/Projects/FuelMoisture/data/reanalysis/era5_precip_19792018.nc C:/Projects/FuelMoisture/data/reanalysis/era5_precip_19792018_mean.nc
+monthsDry <- stack('C:/Projects/FuelMoisture/data/reanalysis/era5_precip_19792018_mean.nc') %>%
+  rotate() %>%
+  which.min() %>%
+  rasterToPoints() %>%
+  as_tibble() %>%
+  rename(long = x, lat = y) %>%
+  filter(long %in% fmc_csv$long,
+         lat %in% fmc_csv$lat) %>%
+  mutate(layerp1 = layer + 1,
+         layerm1 = layer - 1) %>%
+  gather(layer, month, -long, -lat) %>%
+  mutate(month = ifelse(month == 0, 12, month)) %>%
+  mutate(month = ifelse(month == 13, 1, month)) %>%
+  dplyr::select(-layer) %>%
+  arrange(long, lat, month) 
+
+# adding MODIS hotspot data
+#hotspot <- read_sf('C:\\Projects\\FuelMoisture\\data\\gis\\input\\fire_archive_M6_86364.shp') %>%
+#  as_tibble() %>%
+#  dplyr::select(-geometry) %>%
+#  mutate(year = year(ACQ_DATE),
+#         month = month(ACQ_DATE)) %>%
+#  dplyr::select(-TRACK, -ACQ_DATE, -SATELLITE, -INSTRUMENT, -VERSION, #-TYPE) %>%
+#  rename(lat = LATITUDE,
+#         long = LONGITUDE,
+#         brightness = BRIGHTNESS,
+#         scan = SCAN,
+#         time = ACQ_TIME,
+#         conf = CONFIDENCE,
+#         timeOfDay = DAYNIGHT,
+#         bright_t31 = BRIGHT_T31,
+#         frp = FRP)
+hotspot <- read_csv('C:\\Projects\\FuelMoisture\\data\\analysis\\input\\modis_aus.csv') %>%
+  mutate(lat = -(abs(lat) - (abs(lat) %% 0.25)), 
+         long = (long - (long %% 0.25)))
+hotspot <- monthsDry %>%
+  inner_join(hotspot, by = c('long', 'lat', 'month')) %>%
+  group_by(lat, long, year) %>% 
+  mutate(frp_sum = sum(frp),
+         frp_n = n()) %>%
+  ungroup() %>%
+  dplyr::select(lat, long, year, frp_sum, frp_n) %>% 
+  unique()
+
+### Adding bioregions
+ibra <- sf::read_sf('C:\\Projects\\FuelMoisture\\data\\gis\\input\\IBRA7_regions_states.shp') %>%
+  filter(stateID != 0)
+#geol <- sf::read_sf('C:\\Projects\\FuelMoisture\\data\\gis\\input\\GeologicUnitPolygons1M.shp') %>% # broken atm
+#  mutate(geolID = as.numeric(group_indices(., PLOTSYMBOL)),
+#         lithID = as.numeric(group_indices(., LITHOLOGY)),
+#         geolAgeID = as.numeric(group_indices(., GEOLHIST)))
+tnc <- sf::read_sf('C:\\Projects\\FuelMoisture\\data\\gis\\input\\tnc_terr_ecoregions.shp') %>%
+  mutate(ecoID = as.numeric(group_indices(., WWF_MHTNAM)))
+template <- raster::raster('C:\\Projects\\FuelMoisture\\data\\reanalysis\\era5_precip_19792018_mean.tif') #%>% 
+#                           setExtent(., extent(ibra))
+#template <- raster('C:\\Projects\\FuelMoisture\\data\\gis\\input\\era5_resolution.tif')
+
+## fire history data
+fh_qld <- read_sf('C:\\Projects\\FuelMoisture\\data\\analysis\\input\\fireFullHistory_QLD.shp') %>%
+  st_transform(4326) %>%
+  rename(fireType = Type,
+         year = OutYear) %>%
+  mutate(month = month(IgnitionDa),
+         fireType = ifelse(fireType == 'WF', 'Wildfire', 'Prescribed burn')) %>%
+  dplyr::select(year, month, fireType) %>%
+  filter(fireType == 'Wildfire',
+         year %in% c(1980:2019)) %>% # n.b. QLD data is limited to 2016!!!
+  dplyr::select(year) %>%
+  arrange(year)
+fh_vic <- read_sf('C:\\Projects\\FuelMoisture\\data\\analysis\\input\\fireFullHistory_VIC.shp') %>%
+  st_transform(4326) %>%
+  rename(fireType = FIRETYPE,
+         year = SEASON) %>%
+  mutate(month = month(START_DATE),
+         fireType = ifelse(fireType == 'BUSHFIRE', 'Wildfire', 'Prescribed burn')) %>%
+  dplyr::select(year, month, fireType) %>%
+  filter(fireType == 'Wildfire',
+         year %in% c(1980:2019)) %>%
+  dplyr::select(year) %>%
+  arrange(year)
+fh_sa <- read_sf('C:\\Projects\\FuelMoisture\\data\\analysis\\input\\fireFullHistory_SA.shp') %>%
+  st_transform(4326) %>%
+  rename(fireType = INCIDENTTY, year = FIREYEAR) %>%
+  mutate(month = month(FIREDATE), 
+         fireType = ifelse(fireType == 'Bushfire', 'Wildfire', str_to_sentence(fireType))) %>%
+  dplyr::select(year, month, fireType) %>%
+  filter(fireType == 'Wildfire',
+         year %in% c(1980:2019)) %>%
+  dplyr::select(year) %>%
+  arrange(year)
+fh_nsw <- read_sf('C:\\Projects\\FuelMoisture\\data\\analysis\\input\\fireFullHistory_NSW.shp') %>%
+  st_transform(4326) %>%
+  mutate(fireType = str_extract(Label, '[:alpha:]+'),
+         fireType = ifelse(fireType == 'Wildfire', 
+                           fireType, 'Prescribed burn'),
+         month = month(StartDate), 
+         year = year(StartDate)) %>% 
+  dplyr::select(year, month, fireType) %>%
+  filter(fireType == 'Wildfire',
+         year %in% c(1980:2019)) %>%
+  dplyr::select(year) %>%
+  arrange(year)
+fh_tas <- read_sf('C:\\Projects\\FuelMoisture\\data\\analysis\\input\\fireFullHistory_TAS_MN.shp') %>% # Mercy's
+  st_transform(4326) %>%
+  rename(year = YEAR) %>% # YEAR may represent fire-out date rather than ignition date
+  mutate(fireType = ifelse(IGN_CAUSE1 == 'Planned Burn', 'Prescribed burn', 'Wildfire')) %>% # no month data here
+  dplyr::select(year, fireType) %>%
+  filter(fireType == 'Wildfire',
+         year %in% c(1980:2019)) %>% 
+  dplyr::select(year) %>%
+  arrange(year)
+#fh_tas <- read_sf('C:\\Projects\\FuelMoisture\\data\\analysis\\input\\fireFullHistory_TAS.shp') %>% # Grant's file
+#  st_transform(4326) %>%
+#  mutate(geometry = st_make_valid(geometry),
+#         year = year(IGN_DATE),
+#         month = month(IGN_DATE),
+#         fireType = ifelse(IGN_CAUSE1 == 'Planned Burn', 'Prescribed burn', 'Wildfire')) %>%
+#  dplyr::select(year, month, fireType) %>%
+#  filter(fireType == 'Wildfire',
+#         year %in% c(1980:2019)) %>% # limited to 2017!!!!
+#  dplyr::select(year) %>%
+#  arrange(year)
+
+fh_dir <- 'C:\\Projects\\FuelMoisture\\data\\analysis\\input\\NAFI\\'
+fh_ls <- list.files(fh_dir, '^.*\\.(shp)$')
+fh_want <- Reduce(rbind, lapply(paste0(fh_dir, fh_ls), read_sf)) %>%
+  st_transform(4326) %>%
+  rename(month = Month) %>%
+  mutate(fireType = 'Wildfire') %>% #'Tropical' 
+  dplyr::select(year)
+  
+fh_aus <- rbind(fh_qld, fh_nsw, fh_sa, fh_vic, fh_tas, fh_want) %>%
+  mutate(geometry = st_make_valid(geometry)) %>%
+  group_by(year) %>% 
+  summarize(n = n())# %>%
+ # mutate(geometry = st_make_valid(geometry))
+
+fh_ls_split <- list.files(paste0(fh_dir, '\\split\\'), '^.*\\.(shp)$')
+for (i in seq_len(nrow(fh_aus))) {
+  #a <- rasterize(fh_aus[i,], templatea, 'year', 'first')
+  b <- rasterize(fh_aus[i,], templateb, 'year', 'first')
+  c <- rasterize(fh_aus[i,], templatec, 'year', 'first')
+  d <- rasterize(fh_aus[i,], templated, 'year', 'first')
+  #writeRaster(a, paste0(fh_dir, '\\split\\a', 1979 + i, '.tif'), overwrite = TRUE)
+  writeRaster(b, paste0(fh_dir, '\\split\\b', 1979 + i, '.tif'), overwrite = TRUE)
+  writeRaster(c, paste0(fh_dir, '\\split\\c', 1979 + i, '.tif'), overwrite = TRUE)
+  writeRaster(d, paste0(fh_dir, '\\split\\d', 1979 + i, '.tif'), overwrite = TRUE)
+}
+
+#for (i in seq_len(nrow(fh_aus))) {
+#  fname <- paste0(fh_dir, '\\split\\', 1979 + i, '.shp')
+#  write_sf(fh_aus[i,], fname)
+#}
+
+# template resolution = [32,41]
+# x2 -> [64, 82]
+# x3 -> [128, 164] # seems best from test year
+# x4 -> [256, 328]
+templatea <- raster(ncols = 82, nrow = 64, crs = projection(template), ext = extent(template))
+templateb <- raster(ncols = 164, nrow = 128, crs = projection(template), ext = extent(template))
+templatec <- raster(ncols = 328, nrow = 256, crs = projection(template), ext = extent(template))
+templated <- raster(ncols = 656, nrow = 512, crs = projection(template), ext = extent(template))
+
+# n.b. this worked and was completed 16-10-2019
+#fh_ls_split <- list.files(paste0(fh_dir, '\\split\\'), '^.*\\.(shp)$')
+#for (i in 1:length(fh_ls_split)) {
+#  v <- read_sf(paste0(fh_dir, '\\split\\', fh_ls_split[i])) %>%
+#    mutate(uid = as.numeric(row.names(.))) %>%
+#    st_transform(4326)
+#  r <- rasterize(v, templatea, 'uid', 'first')
+#  writeRaster(r, paste0(fh_dir, '\\split\\', as.numeric(gsub('.shp', '', fh_ls_split[i])), 'a.tif'), overwrite = TRUE)
+#}
+
+fh_st <- list.files(paste0(fh_dir, '\\split\\'), 
+                      pattern = '(d).*\\.tif', full.names = T) %>% 
+  stack()
+
+fh_st <- stack(fh_ls) %>%
+  rasterToPoints() %>%
+  as_tibble() %>% 
+  gather(file, fire, -x, -y) %>%
+  rename(long = x, lat = y) %>%
+  mutate(date = as.Date( paste0( as.character( as.numeric( 
+    gsub('[^[:digit:]]', '', file)) - 41000000), '01'), '%Y%m%d'),
+         month = month(date),
+         year = year(date)) %>%
+  dplyr::select(-file, -date)
+ 
+# current error in sf library requires redefining this before we can nest as_tibble(sf) objects
+#vec_proxy.sfc <- function(x, ...) {
+#  x
+#}
+
+#foo <- tmp %>% 
+#  as_tibble() %>%
+#  group_by(year) %>%
+#  nest() 
+#%>%
+  #mutate(rast = map(data, rasterize, template2, 'uid', 'first'))
+#
+  #rasterToPoints() %>% 
+  #as_tibble() 
+
+
+## Ecoregions IBRA-7
+ibraRegion <- raster::rasterize(ibra, template, field = 'REC_ID', fun = 'first') %>%
+  rasterToPoints() %>%
+  as_tibble() %>%
+  rename(long = x, lat = y, regionID = layer) %>%
+  merge(read_csv('C:\\Projects\\FuelMoisture\\data\\analysis\\input\\bioregionIDs_stateIDs.csv') %>%
+          dplyr::select(REG_CODE_7, REG_NAME_7, REC_ID), 
+        by.x = 'regionID', by.y = 'REC_ID') %>%
+  as_tibble() %>%
+  unique() %>%
+  dplyr::select(-regionID) %>%
+  rename(regionID = REG_CODE_7,
+         regionName = REG_NAME_7)
+
+## State boundaries IBRA-7
+ibraState <- rasterize(ibra, template, field = 'stateID', fun = 'first') %>%
+  rasterToPoints() %>%
+  as_tibble() %>%
+  rename(long = x, lat = y, stateID = layer) %>%
+  merge(read_csv('C:\\Projects\\FuelMoisture\\data\\analysis\\input\\bioregionIDs_stateIDs.csv') %>% 
+          dplyr::select(stateID, STA_CODE) %>% 
+          unique(), 
+        by = 'stateID') %>%
+  as_tibble() %>%
+  dplyr::select(-stateID) %>%
+  rename(stateID = STA_CODE)
+
+## Geology -- CAN'T GET IT TO WORK :(
+# columns: lithology, plotsymbol, geolhist
+#geolLith <- rasterize(geol, template, field = 'geolID', fun = 'first') %>%
+#  rasterToPoints() %>%
+#  as_tibble()
+
+## TNC Ecoregions
+tncRegion <- rasterize(tnc, template, field = 'ecoID', fun = 'first') %>%
+  rasterToPoints() %>%
+  as_tibble() %>%
+  rename(long = x, lat = y, ecoID = layer) %>%
+  merge(tnc[,c('ecoID', 'WWF_MHTNAM')], by = 'ecoID') %>%
+  dplyr::select(-ecoID, -geometry) %>%
+  rename(ecoID = WWF_MHTNAM) %>%
+  unique() %>% 
+  as_tibble()
+
+```"

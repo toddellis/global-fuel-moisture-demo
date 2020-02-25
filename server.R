@@ -91,6 +91,7 @@ shinyServer(
     # Object to store selected points in
     data_of_click <- reactiveValues(clickedMarker = list())
     
+    ## Set up data ahead of plotting
     foo_climbar <- reactive({
       if ( input$input_file == 'fmc_prop') 
         fmc_prop %>%
@@ -103,6 +104,7 @@ shinyServer(
       
     })
     
+    ## Set up data for mapping
     foo <- reactive({
       foo <- if ( input$input_file == 'fmc_prop') 
         fmc_prop
@@ -118,12 +120,14 @@ shinyServer(
       foo
     })
     
+    ## Set up response variable for plots
     response_var <- reactive({
       foo <- if(input$response_year == 2020) 
         foo() %>% dplyr::select(-year)
       else foo()
     })
     
+    ## Set up independent variable for scatterplot
     interaction_var <- reactive({
       foo <- if(input$interaction_var == 'elev')
         elev
@@ -137,9 +141,11 @@ shinyServer(
         temp
       else if (input$interaction_var %in% c('cvh', 'cvl')) 
         veg
+      else if (input$interaction_var %in% c('baMedian', 'baMin', 'frpMedian', 'frpMin'))
+        fmc_rt_thresh
       else yearx
       
-      foo <- if(input$interaction_var %in% c('elev', 'lat_int', 'long_int', 'cvl', 'cvh'))
+      foo <- if(input$interaction_var %in% c('elev', 'lat_int', 'long_int', 'cvl', 'cvh', 'baMedian', 'baMin', 'frpMedian', 'frpMin'))
         foo %>% dplyr::select(lat, long, interaction_var = !! input$interaction_var)
       else if(input$interaction_var == 'year_int')
         foo %>% dplyr::select(year, interaction_var =  year_int)
@@ -148,6 +154,7 @@ shinyServer(
       foo
     })
     
+    ## Set up color grouping variable for scatterplot
     color_var <- reactive({
       foo <- if(input$color_var == 'none')
         tibble(lat = latlong$lat,
@@ -164,6 +171,7 @@ shinyServer(
       foo
     })
     
+    ## Further prepare data for mapping
     foo_map <- reactive( {
       foo <- foo() %>%
         filter(year == !! input$response_year)  %>%
@@ -177,7 +185,7 @@ shinyServer(
         foo %>% mutate(response_var_ln = log(response_var))
       else foo
     } )
-    
+    ## Extract coordinates for creating interactive spatial objects
     coordinates <-  reactive({
       foo_map() %>%
         SpatialPointsDataFrame(.[,c('long', 'lat')], .)
@@ -194,7 +202,7 @@ shinyServer(
       
       ##### Rasterize the smallest dataset to visualize
       ### use log-transformed thresholds for summary data
-      ## this is only associated with the colort theme
+      ## this is only associated with the color theme
       foo_map_raster <- if (input$response_year == 2020)
         foo_map() %>%
         dplyr::select(long, lat, response_var = response_var_ln) %>%
@@ -288,20 +296,7 @@ shinyServer(
                                                        opacity = 1.0,
                                                        weight = 2,
                                                        bringToFront = TRUE))
-      
-      ### Create postgresql object of selected lat-long coordinates
-      #copy_to(dbPostgres,
-      #        selectedLocations(),
-      #        'selected_locations',
-      #        overwrite = TRUE,
-      #        temporary = FALSE,
-      #        indexes = list(
-      #          'lat',
-      #          'long'
-      #        ))
-      
-      
-      
+   
     })
     
     ##### Extract selected lat-long coordinates reactively to reuse
@@ -351,24 +346,27 @@ shinyServer(
     ##### Pull selected-only data from database
     ## Basis dataset for all plots
     selectedLocations_sql <- eventReactive(input$fmc_map_draw_new_feature, {
+      ## N.B. Artifact step from dropped PostgreSQL version
       selectedLocations() %>%
         distinct()
-      #tbl(dbPostgres, 
-      #    'selected_locations') %>%
-      #  collect() 
     })
     
+    ## Extract selected data for scatterplot
     selectedLocations_sql_scatter <- eventReactive(input$update_plots, {
-      selectedLocations_sql() %>%
+      foo <- selectedLocations_sql() %>%
         left_join(response_var()) %>%
         left_join(interaction_var()) %>%
-        left_join(color_var())# %>%
-        ## choose all variables required for plotting
-        #dplyr::select(response_var,
-        #              interaction_var,
-        #              color_var) 
+        left_join(color_var())
+      ## Add 1 for log-scale in scatterplot
+      foo <- if(input$interaction_var %in% c('frp_n', 'frp_mean', 'frp_sum', 'burned_area'))
+        foo %>% 
+        mutate(interaction_var = interaction_var + 1)
+      else foo
+      
+      foo
     })
     
+    ## Extract selected data for climate bars & line plot
     selectedLocations_sql_climbar <- eventReactive(input$update_plots, {
       foo <- if(input$input_file == 'fmc_prop')
         ## Gathers all 32 thresholds for line plot
@@ -386,7 +384,7 @@ shinyServer(
         
     })
     
-    ## generate means dataset for line plot, and subsequent bar plot
+    ## Create grouped means for line and bar plots
     selectedLocations_plot_mean <- eventReactive(input$update_plots, {
       
       foo <- if(input$input_file == 'fmc_prop')
@@ -409,6 +407,7 @@ shinyServer(
     # Plot 1: Climate bars
     ########################
     
+    ## Draw bar plot
     plot_bar <- eventReactive(input$update_plots, {
       
       tmp <- if(input$input_file == 'fmc_prop')
@@ -439,17 +438,15 @@ shinyServer(
               panel.grid.minor = element_blank(),
               plot.title = element_text(size = 14, face = 'bold')) +
         # color gradient direction based on the response_var
-        scale_fill_gradientn(colors = rev(pal_climate))#if(input$response_year == 2020) 
-            #pal_climate 
-         # else 
-            #rev(pal_climate)) 
+        scale_fill_gradientn(colors = rev(pal_climate))
+      
       p
     })
     
     ########################
     # Plot 2: Line 
     ########################
-    # n.b. this needs to be fixed for non-fmc_prop responses
+    # Draw line plot
     plot_line <- eventReactive(input$update_plots, {
       p <- selectedLocations_plot_mean() %>%
         ggplot(aes(x = year, y = response_var)) +
@@ -474,6 +471,7 @@ shinyServer(
         labs(title = '',
              caption = 'Change in dry season, 1980-2018')
       
+      ## Highlight threshold % of choice
       p <- if(input$input_file == 'fmc_prop') 
         p + aes(group = fmc_threshold, 
                 color = as.numeric(fmc_threshold)) +
@@ -493,20 +491,24 @@ shinyServer(
     ########################
     # Plot 3A: Interaction
     ########################
-    
+    ## draw scatterplot
     plot_scatter <- eventReactive(input$update_plots, {
       p <- selectedLocations_sql_scatter() %>%
         ggplot(aes(x = interaction_var, y = response_var)) +
-        theme_classic() +
+        theme_classic() 
+      p <- if(input$color_var == 'none')
+        p +
+        geom_hex() +
+        scale_fill_gradientn(colors = rev(pal_climate)) +
+        theme(legend.position = 'none')
+      else p +
         geom_point(alpha = 0.10) +
-        #geom_line(stat = 'smooth', se = F, alpha = 0.55,
-        #          #aes(color = color_var),
-        #          method = 'lm', 
-        #          size = 1.5) +
         scale_color_viridis_d() +
+        theme(legend.position = 'top')
+      
+      p <- p +
         geom_smooth(se = T, alpha = 0.25, fill = 'hotpink', color = 'darkred', 
                     method = 'gam', formula = y ~ s(x, k = 9)) +
-        theme(legend.position = 'top') +
         labs(y = switch(input$response_var,
                         'thresh1'=  'Proportion of dry season <= 1%',
                         'thresh2'=  'Proportion of dry season <= FMC 2%',
@@ -554,6 +556,10 @@ shinyServer(
                                           'Proportion of dry season <= local FMC threshold')),
              x = switch(input$interaction_var,
                         'elev' = 'Elevation',
+                        'baMedian' = 'Median FMC-burned area threshold (%)',
+                        'baMin' = 'Minimum FMC-burned area threshold (%)',
+                        'frpMedian' = 'Median FMC-FRP threshold (%)',
+                        'frpMin' = 'Minimum FMC-FRP threshold (%)',
                         'lat_int' = 'Latitude',
                         'long_int' = 'Longitude',
                         'frp_n' = 'MODIS FRP (count)',
@@ -570,10 +576,10 @@ shinyServer(
                         'cvl' = 'Veg. cover (low)',
                         'year_int' = 'Year')) 
       
-      p <- if(input$response_year != 2020)
+      p <- if(input$response_year != 2020 && input$color_var != 'none')
         p + geom_point(data = . %>%
                          filter(year == !! input$response_year),
-                       shape = 21, alpha = 0.45, size = 3,
+                       shape = 21, alpha = 0.35, size = 3,
                        color = 'white', fill = 'darkred')
       else p
       
@@ -592,22 +598,15 @@ shinyServer(
                             'tvl' = 'Veg. type (low)'))
       else p
       
-      p
-    })
-    
-    ########################
-    # Plot 3B: Interaction
-    ########################
-    
-    plot_scatter_trans <- eventReactive(input$update_plots, {
-      if (!! input$interaction_var %in% c('frp_sum', 'frp_mean', 'frp_n', 'burned_area')) {
-        plot_scatter() + 
+      p <- if (!! input$interaction_var %in% c('frp_sum', 'frp_mean', 'frp_n', 'burned_area')) {
+        p + 
           scale_x_log10()
       } else {
-        plot_scatter()
+        p
       }
+      
+      p
     })
-    
     
     ##########################
     ##### DRAW PLOTS #########
@@ -615,10 +614,8 @@ shinyServer(
     
     output$climatePlots <- renderPlot(res = 90, {
       
-      #plot_scatter_trans()
-      
       ## Concatenate all 3 reactive plots
-      tmp <- align_plots(plot_bar(), plot_scatter_trans(), 
+      tmp <- align_plots(plot_bar(), plot_scatter(), 
                          align = 'v', axis = 'l')
       
       plot_grid(tmp[[1]],
@@ -627,48 +624,6 @@ shinyServer(
                 ncol = 1)
       
     })
-    
-  #  output$distPlot <- renderPlot(res = 90, {
-  #    
-  #    selectedLocations_sql() %>%
-  #      ggplot(aes(x = response_var)) +
-  #      geom_histogram(border = 'white') +
-  #      theme_void() + 
-  #      labs(x = switch(input$response_var,
-  #                      'fmc_prop' = '% of dry season <= FMC threshold',
-  #                      'fmc_min' = 'Minimum FMC (%)', 
-  #                      'fmc_max' = 'Maximum FMC (%)',  
-  #                      'fmc_mean' = 'Mean FMC (%)', 
-  #                      'fmc_median' = 'Median FMC (%)', 
-  #                      'fmc_range' = 'Range of FMC (%)', 
-  #                      'fmc_var' = 'Variability of FMC (%)', 
-  #                      'fmc_sd' = 'Std. dev. of FMC (%)', 
-  #                      'ffmc_mean' = 'Mean FFMC index',
-  #                      'ffmc_min' = 'Minimum FFMC index',
-  #                      'ffmc_max' = 'Maximum FFMC index',
-  #                      'frp_sum' = 'Total fire radiative power',
-  #                      'frp_mean' = 'Mean dry season fire radiative power',
-  #                      'frp_n' = 'Number of recorded hotspot fires',
-  #                      'burned_area' = 'Burned area (kg/m2)'),
-  #           y = 'Count') +
-  #      scale_x_continuous(expand = c(0, 0)) + 
-  #      scale_y_continuous(expand = c(0, 0)) + 
-  #      theme(panel.background = element_rect(fill = "#2B3E4F"), #4E5D6C or #2B3E50
-  #            plot.background = element_rect(fill = '#2B3E4F'))
-  #    #legend.background = element_rect(fill = "#2B3E4F"),
-  #    #strip.background = element_rect(fill = '#2B3E4F'),
-  #    #panel.grid = element_line(color = '#2B3E50'),
-  #    #axis.title = element_text(colour = "grey85", size = 22),
-  #    #axis.title.x = element_text(margin = margin(t = 10)),
-  #    #axis.title.y = element_text(margin = margin(r = 10, l = 10)),
-  #    #axis.text = element_text(color = 'grey65', size = 16),
-  #    #legend.position = 'bottom',
-  #    #legend.text = element_text(color = 'grey65', size = 14),
-  #    #legend.title = element_text(color = 'grey85', size = 15),
-  #    #strip.text = element_text(color = 'grey65', size = 16))
-  #    
-  #  })
-  #  
     
     
   })

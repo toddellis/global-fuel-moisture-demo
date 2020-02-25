@@ -1,0 +1,108 @@
+"0","```r
+##### ggplot
+loc.resid %>%
+  ggplot(aes(year, resid)) +
+  geom_line(aes(group = interaction(lat, long)), alpha = 1/3) +
+  theme_bw() + 
+  ylab('Residuals') +
+  xlab('Year') +
+  labs(color = 'Season') +
+  geom_smooth(method = 'loess', se = F, aes(group = season, color = season)) +
+  facet_wrap(~season)
+
+loc.pred %>%
+  ggplot(aes(year, pred)) +
+  geom_line(aes(group = interaction(lat, long)), alpha = 0.15) +
+  theme_bw() +
+  ylab('Predicted values') + 
+  xlab('Year') +
+  labs(color = 'Season') +
+  geom_smooth(method = 'loess', se = F, aes(group = season, color = season))
+
+loc.resid %>%
+  filter(decade >= 1980) %>%
+  ggplot(aes(x = as.factor(decade), y = resid, group = decade, color = as.factor(decade))) + 
+  geom_boxplot(position = position_dodge(0.1)) +
+  theme_bw() +
+  ylab('Residuals') +
+  xlab('Decade') +
+  labs(color = 'Decade') +
+  facet_wrap(~season)
+
+loc.pred %>%
+  filter(decade >= 1980) %>%
+  ggplot(aes(x = as.factor(decade), y = pred, group = decade, color = as.factor(decade))) + 
+  geom_hline(yintercept = c(10, 8), size = 1, alpha = 0.5) +
+  geom_boxplot(position = position_dodge(0.1)) +
+  theme_bw() +
+  ylab(expression(hat(FMC))) +
+  xlab('Decade') +
+  labs(color = 'Decade') +
+  facet_wrap(~season) +
+  scale_y_log10()
+
+loc.aug %>%
+  ungroup() %>%
+  ggplot(aes(.fitted, .resid)) +
+  geom_point(data = loc.aug %>% ungroup() %>% dplyr::select(-season), aes(.fitted, .resid), alpha = 0.05) +
+  geom_hline(yintercept = 0, alpha = 0.4, size = 1.3) +
+  geom_point(alpha = 0.15, aes(color = season)) +
+  theme_bw() + 
+  xlab(expression(hat(FMC))) +
+  ylab('Residuals') + 
+  facet_wrap(~season)
+
+loc.tidy %>%
+#  filter(term != '(Intercept)') %>% # also consider filtering latitudes
+#  filter(lat >= -20) %>%
+  ungroup() %>%
+  mutate(season = factor(season, levels = c('spring', 'summer', 'autumn', 'winter')),
+         lat_grad = lat - lat %% 10,
+         long_grad = long - long %% 10) %>%
+  ggplot(aes(x = season, y = estimate, color = season)) +
+  geom_hline(yintercept = 0, alpha = 0.4, size = 1.3) +
+  geom_boxplot(position = position_dodge(1)) +
+  theme_bw() + 
+  facet_grid(term ~ lat_grad, scales = 'free') +
+  stat_summary(fun.y = mean, shape = 23, geom = 'point', position = position_dodge(1)) +
+  labs(x = 'Season', y = 'Slope estimate')
+
+loc.tidy %>%
+  ungroup() %>%
+  filter(term != '(Intercept)', estimate <= 0, p.value <= 0.1) %>% # also consider estimate <= 0
+#  dplyr::select(-group, -level) %>%
+  unique() %>%
+  mutate(season = factor(season, levels = c('spring', 'summer', 'autumn', 'winter'))) %>%
+  ggplot(aes(x = long, y = lat, color = estimate)) +
+  geom_sf(data = filter(world_sf, SOVEREIGNT == 'Australia', TYPE == 'Country'), 
+          aes(x = LON, y = LAT), fill = 'white', color = 'black', size = 0.5/.pt, alpha = 0.9) +
+  geom_jitter(size = 3, shape = 'square') +
+  scale_color_viridis_c(option = 'B', direction = -1) + 
+  scale_alpha(trans = 'reverse') +
+  theme_classic() + 
+  facet_grid(.~season) + 
+  theme_minimal_grid() + ylim(-43, -10) + xlim(113, 154) +
+  labs(x = 'Longitude', y = 'Latitude', color = 'Slope \nestimate',
+       subtitle = 'Annual shift in fine fuel moisture content (1979-2018)')
+
+#ggsave('Australia_fmc~yearx_slopes_negonly_alphab.png', dpi = 720, width = 18, height = 11.5, unit = 'in')
+
+loc.glance %>%
+  merge(filter(loc.tidy[,c(1:5)]), by = c('long', 'lat', 'season')) %>%
+  ungroup() %>%
+  filter(estimate <= 0, term != '(Intercept)') %>%
+  unique() %>%
+  mutate(season = factor(season, levels = c('spring', 'summer', 'autumn', 'winter'))) %>%
+  ggplot(aes(x = long, y = lat, color = estimate, alpha = adj.r.squared)) +
+  theme_minimal_grid() +
+  geom_sf(data = filter(world_sf, SOVEREIGNT == 'Australia', TYPE == 'Country'),
+          aes(x = LON, y = LAT), fill = 'white', color = 'black', size = 0.5/.pt, alpha = 0.9) +
+  geom_point(size = 3, shape = 'square') +
+  scale_color_viridis_c(option = 'B', direction = -1) +
+#  scale_alpha(trans = 'reverse') +
+  facet_grid(.~season) +
+  ylim(-43, -10) +
+  xlim(113, 154) +
+  labs(x = 'Longitude', y = 'Latitude', color = 'Slope \nestimate', alpha = bquote('Adj. R'^2),
+       subtitle = 'Annual shift in seasonal fine fuel moisture')
+```"

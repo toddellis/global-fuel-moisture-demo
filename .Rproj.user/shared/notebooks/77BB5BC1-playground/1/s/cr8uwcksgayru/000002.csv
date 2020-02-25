@@ -1,0 +1,27 @@
+"0","```r
+fmc.gam <- fmc %>%
+  filter(threshold == 8) %>%
+  gam(fmc_mean ~
+        s(yearx, lat) + # s(lat) + s(long) +
+        te(long, lat),
+      data = .,
+      method = 'REML')
+
+summary(fmc.gam); AIC(fmc.gam)
+
+gam.check(fmc.gam)
+
+plot.gam(fmc.gam,
+         residuals = T, 
+         shade = T, 
+         pages = 1, 
+         all.terms = T, 
+         rug = T, 
+         pch = 1, 
+         cex = 1, 
+         shade.col = 'lightblue', 
+         seWithMean = T, 
+         shift = coef(fmc.gam)[1])
+
+
+```"

@@ -10,9 +10,9 @@ shinyUI(
       # Set the theme
       theme = shinytheme('superhero'),
       # Set the title
-      title = 'Global dead fine fuel moisture content, 1980-2018, v. 2.0',
+      title = 'Global dead fine fuel moisture content, 1980-2018, v. 2.1',
       tabPanel("[ data explorer ]"),
-      # Temporary data preview
+      # Test data preview
       #fluidRow(
       #  verbatimTextOutput('test_text'),
       #),
@@ -23,23 +23,32 @@ shinyUI(
                leafletOutput('fmc_map')
         ),
         column(4,
-               # Sidebar with a slider input for number of bins 
-               #  sidebarPanel(
+               ## Select a study area
                pickerInput('study_area',
                            '[ study area ]',
                            c('SE Australia' = 'nsw',
                              'W North America' = 'wna'),
                            'nsw'),
+               ## Select dataset: 
+               ### a) 1-32 FMC threshold proportions
+               ### b) locally-defined FMC thresholds & proportions
                pickerInput('input_file',
                            '[ data type ]',
                            c('FMC proportions' = 'fmc_prop',
                              'FMC thresholds' = 'fmc_rt'),
                            'fmc_rt'),
+               ## Dynamic response variable selector
                uiOutput('ui_response_var'),
+               ## Dynamic response year selector
                uiOutput('ui_response_year'),
+               ## Select an interaction variable for scatterplot
                pickerInput('interaction_var',
                            '[ plot interaction ]',
                            c('Elevation' = 'elev',
+                             'FMC threshold: Med. burned area' = 'baMedian',
+                             'FMC threshold: Med. FRP' = 'frpMedian',
+                             'FMC threshold: Min. burned area' = 'baMin',
+                             'FMC threshold: Min. FRP' = 'frpMin',
                              'Latitude' = 'lat_int',
                              'Longitude' = 'long_int',
                              'MODIS FRP (count)' = 'frp_n',
@@ -56,6 +65,7 @@ shinyUI(
                              'Veg. cover (low)' = 'cvl',
                              'Year' = 'year_int'),
                            'tpds'),
+               ## Select a color grouping variable for scatterplot
                pickerInput('color_var',
                            '[ plot color ]',
                            c('None' = 'none',
@@ -64,23 +74,19 @@ shinyUI(
                              'Veg. type (high)' = 'tvh',
                              'Veg. type (low)' = 'tvl'),
                            'none'),
+               ## Button to update figures
                actionButton('update_plots', 
                             'Update figures')
                
         )
         
       ),
-      # Climate bars
+      ## Section for figure outputs
       fluidRow(
         column(12,
                hr(),
                plotOutput('climatePlots', height = 720)
         )
-      ),
-      column(12,
-             
-             
-             plotOutput("distPlot")
       )
       
     )

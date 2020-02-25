@@ -22,6 +22,7 @@ library(tmap)
 library(tmaptools)
 library(mapdeck)
 library(geoshaper)
+library(hexbin) # geom_hex
 
 ### Load study region FMC data
 ## 1-32 FMC thresholds

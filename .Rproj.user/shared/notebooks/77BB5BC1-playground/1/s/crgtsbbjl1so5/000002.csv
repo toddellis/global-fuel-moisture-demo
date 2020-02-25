@@ -1,0 +1,58 @@
+"0","```r
+test_fbp %>%
+  fbp('All') %>%
+  head()
+
+test_fbp %>%
+  fbp('All') %>%
+  ggplot(aes(
+    x = (147.27 * ( ( 101 - FFMC ) / (59.5 + FFMC) ) ), 
+    y = CFB)) +
+  theme_bw() +
+  geom_vline(xintercept = c(10), size = 1, 
+             alpha = 0.15, color = 'grey40') +
+  geom_vline(xintercept = c(8), size = 1.25, 
+             alpha = 0.25, color = 'grey40') +
+  geom_point(aes(color = FD)) +
+  geom_smooth(se = F, method = 'lm', 
+              formula = y ~ splines::bs(x, 3),
+              color = 'grey60') +
+  geom_line(stat = 'smooth', se = F, method = 'lm', 
+            size = 1, alpha = 0.25, 
+            aes(color = FD))
+
+
+test_fbp %>%
+  fbp('All') %>%
+  ggplot(aes(
+    x = (147.27 * ( ( 101 - FFMC ) / (59.5 + FFMC) ) ), 
+    y = ROS)) +
+  theme_bw() +
+  geom_vline(xintercept = c(10), size = 1, 
+             alpha = 0.15, color = 'grey40') +
+  geom_vline(xintercept = c(8), size = 1.25, 
+             alpha = 0.25, color = 'grey40') +
+  geom_point(aes(color = FD)) +
+  geom_smooth(se = F, method = 'lm', 
+              formula = y ~ splines::bs(x, 3),
+              color = 'grey60') +
+  geom_line(stat = 'smooth', se = F, method = 'lm', 
+            size = 1, alpha = 0.25, 
+            aes(color = FD))
+
+
+test_fwi %>%
+  fwi() %>%
+  head()
+
+test_fwi %>%
+  fwi() %>%
+  ggplot(aes(x = RH, y = (101 - FFMC))) +
+  theme_bw() +
+  geom_point() +
+  scale_y_log10() + 
+  geom_bag()
+
+#ggsave('fwi_rh.png', dpi = 720, width = 8, height = 6)
+
+```"

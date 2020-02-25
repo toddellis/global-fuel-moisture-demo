@@ -1,0 +1,169 @@
+"0","```r
+# inputs
+ecoID <- vroom('./input/_ecoIDGlobal.csv.gz')
+fmc <- vroom('./input/fmc_global_sp_v2.csv.gz')
+#fmc <- vroom('./input/ffmc_global_v2_wide.csv.gz')
+modis_ba <- vroom('./input/_modis_burnedArea_resample.csv.gz')
+modis_frp <- vroom('./input/_modis_frp.csv.gz')
+
+### Study region: Tasmania
+fmc_tas <- fmc %>% 
+  filter(between(lat, -45, -39), between(long, 140, 150)) %>%
+  left_join(ecoID) %>%
+  left_join(modis_ba) %>%
+  left_join(modis_frp) %>%
+  replace_na( list( burnedArea = 0,
+                    frp_n = 0,
+                    frp_sum = 0,
+                    frp_mean = 0))
+
+### Study region: WA + OR
+fmc_pnw <- fmc %>% 
+  filter(between(lat, 37.5, 52.5), between(long, -125, -110)) %>%
+  left_join(ecoID) %>%
+  left_join(modis_ba) %>%
+  left_join(modis_frp) %>%
+  replace_na( list( burnedArea = 0,
+                    frp_n = 0,
+                    frp_sum = 0,
+                    frp_mean = 0))
+
+### Study region: NSW + Victoria
+fmc_nsw <- fmc %>%
+  filter(between(lat, -39, -27),
+         between(long, 140, 154)) %>%
+  left_join(ecoID) %>%
+  left_join(modis_ba) %>%
+  left_join(modis_frp) %>%
+  replace_na( list( burnedArea = 0,
+                    frp_n = 0,
+                    frp_sum = 0,
+                    frp_mean = 0))
+
+### dynamic: rename to whatever dataset we want to process...
+tmp <- fmc_nsw
+
+### using cor()
+# n.b. cor() does not provide diagnostic statistics
+foo <- list()
+for(i in 1:32) {
+#  foo[[i]] <- fmc_tas %>%
+  foo[[i]] <- tmp %>%
+    group_by(lat, long, ecoID) %>%
+    rename(foobar = paste0('thresh', i)) %>%
+    summarise(burnedArea = cor(foobar, burnedArea,
+                        method = 'spearman'),
+              frp_n = cor(foobar, frp_n,
+                          method = 'spearman'),
+              frp_sum = cor(foobar, frp_sum,
+                            method = 'spearman'),
+              frp_mean = cor(foobar, frp_mean,
+                             method = 'spearman')) %>%
+    mutate(threshold = i)
+}  
+foo <- bind_rows(foo)
+#vroom_write(foo, 'temp_fmc_nsw_cor.csv')
+
+### The inflated zeros and ones influence the correlation values, so we want to discount those where >= 50% of the years feature as entirely 0s or 1s
+fmc01 <- tmp %>%
+  dplyr::select(-burnedArea, -frp_sum, -frp_n, -frp_mean) %>%
+  gather(threshold, proportion, -lat, -long, -year) %>%
+  group_by(lat, long, threshold, 
+           inflation = case_when(proportion == 0 ~ 'Zero',
+                                 # n.b. no days feature 1 in Tasmania
+                                 proportion == 1 ~ 'One',
+                                 TRUE ~ 'NULL')) %>%
+  summarise(n = n()) %>%
+  filter(threshold %in% paste0('thresh', c(1:32)),
+         n >= 20,
+         inflation %in% c('Zero', 'One')) %>%
+  ungroup() %>%
+  mutate(threshold = parse_number(threshold))
+
+bar <- foo %>%
+  ungroup() %>%
+  left_join(fmc01) %>%
+  filter(is.na(inflation)) %>%
+  dplyr::select(lat, long, threshold, burnedArea) %>%
+  filter(!is.na(burnedArea), burnedArea >= 0) %>%
+  arrange(lat, long, desc(burnedArea), threshold) %>%
+  group_by(lat, long) %>%
+  slice(1) %>%
+  full_join(foo %>%
+              ungroup() %>%
+              left_join(fmc01) %>%
+              filter(is.na(inflation)) %>%
+              dplyr::select(lat, long, threshold, frp_mean) %>%
+              filter(!is.na(frp_mean), frp_mean >= 0) %>%
+              arrange(lat, long, desc(frp_mean), threshold) %>%
+              group_by(lat, long) %>%
+              slice(1)) %>%
+  full_join(foo %>%
+              ungroup() %>%
+              left_join(fmc01) %>%
+              filter(is.na(inflation)) %>%
+              dplyr::select(lat, long, threshold, frp_sum) %>%
+              filter(!is.na(frp_sum), frp_sum >= 0) %>%
+              arrange(lat, long, desc(frp_sum), threshold) %>%
+              group_by(lat, long) %>%
+              slice(1)) %>%
+  full_join(foo %>%
+              ungroup() %>%
+              left_join(fmc01) %>%
+              filter(is.na(inflation)) %>%
+              dplyr::select(lat, long, threshold, frp_n) %>%
+              filter(!is.na(frp_n), frp_n >= 0) %>%
+              arrange(lat, long, desc(frp_n), threshold) %>%
+              group_by(lat, long) %>%
+              slice(1)) %>%
+  arrange(lat, long, threshold) %>%
+  ungroup()
+
+bar %>%
+  dplyr::select(long, lat, threshold, fire = frp_mean) %>%
+  mutate(threshold_group = case_when(between(threshold, 0, 8) ~ '00-08%',
+                                     between(threshold, 9, 12) ~ '09-12%',
+                                     between(threshold, 13, 17) ~ '13-17%',
+                                     between(threshold, 18, 32) ~ '18-32%')) %>%
+  ungroup() %>% 
+  filter(!is.na(fire)) %>%
+  ggplot() +
+  geom_sf(data = filter(world_sf), 
+#                        SOVEREIGNT == 'Australia', 
+#                        TYPE == 'Country'), 
+          aes(x = LON, y = LAT)) + 
+  geom_tile(aes(x = long, y = lat, 
+                fill = threshold, alpha = fire))  +
+  theme_classic() +
+  scale_fill_gradientn(colors = brewer.pal(11, 'RdBu')) +
+  ## PNW limits
+#  xlim(-125, -110) + ylim(37.5, 52.5) +
+  ## TAS limits
+#  xlim(143.5, 148.5) + ylim(-43.75, -39) +
+  ## NSW limits
+  xlim(140, 153.5) + ylim(-39, -27) +
+  labs(x = 'Longitude', y = 'Latitude',
+       fill = 'FMC \nthreshold (%)',
+       alpha = 'Spearman \ncorrelation',
+       title = 'Fuel moisture threshold correlation with MODIS hotspot data',
+       subtitle = 'Fire radiative Power (mean)')
+  
+ggsave('test_correlation_nsw_frp_mean.png', dpi = 720,
+       width = 10, height = 8.75)
+
+
+ # ggplot(aes(x = long, y = lat, color = cor)) +
+ # geom_point() +
+ # theme_classic() +
+ # scale_color_gradientn(colors = rev(brewer.pal(11, 'RdBu'))) +
+ # facet_grid(is.na(cor)~ecoID)
+ # nest() %>%
+ # mutate(cor = map(data, 
+ #                  ~ cor.test(formula = ~ .x$thresh17 + .x$frp_mean,
+ #                             #exact = TRUE,
+ #                             #continuity = TRUE,
+ #                             #alternative = 'greater',
+ #                             method = 'spearman')),
+ #        cor_t = map(cor, tidy))
+#
+```"

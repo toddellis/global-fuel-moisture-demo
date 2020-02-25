@@ -1,0 +1,57 @@
+"0","```r
+# annual or decadal proportion
+bar <- foo %>%
+  dplyr::select(-ffmc, -day) %>%
+  filter(decade != '1970s') %>%
+  group_by(long, lat, month) %>%
+  mutate(fmc_monSummary = (sum(fmc_thresh) / length(date)),
+         rank_monSummary = dense_rank(desc(fmc_monSummary))) %>%
+  ungroup() %>%
+  group_by(long, lat, year, month) %>%
+  mutate(fmc_monPrp = (sum(fmc_thresh) / length(date)),
+         fmc_monCt = sum(fmc_thresh)) %>%
+  ungroup() %>%
+  group_by(long, lat, year2, season) %>%
+  mutate(fmc_seaPrp = (sum(fmc_thresh) / length(date)),
+         fmc_seaCt = sum(fmc_thresh)) %>%
+  ungroup() %>%
+  group_by(long, lat, year) %>%
+  mutate(fmc_annPrp = (sum(fmc_thresh) / length(date)),
+         fmc_annCt = sum(fmc_thresh)) %>%
+  ungroup() %>%
+  group_by(long, lat, decade) %>%
+  mutate(fmc_decPrp = (sum(fmc_thresh) / length(date)),
+         fmc_decCt = sum(fmc_thresh)) %>%
+  ungroup() %>%
+  group_by(long, lat, decade, season) %>%
+  mutate(fmc_dec_seaPrp = (sum(fmc_thresh) / length(date)),
+         fmc_dec_seaCt = sum(fmc_thresh)) %>%
+  ungroup() %>%
+  group_by(long, lat, decade, month) %>%
+  mutate(fmc_dec_monPrp = (sum(fmc_thresh) / length(date)),
+         fmc_dec_monCt = sum(fmc_thresh)) %>%
+  ungroup() %>%
+  dplyr::select(-fmc, -date, -fmc_thresh) %>%
+  unique()
+
+
+bar %>%
+#  filter(fmc_dec_sea >= 0.7) %>%
+  ggplot(aes(x = long, y = lat, color = fmc_dec_mon)) +
+  geom_sf(data = filter(world_sf, 
+                        SOVEREIGNT == 'Australia', 
+                        TYPE == 'Country'), 
+          aes(x = LON, y = LAT), 
+          fill = 'white', color = 'black', 
+          size = 0.5/.pt, alpha = 0.9) +
+  geom_point(size = 3, shape = 'square') +
+  scale_color_viridis_c(option = 'B', direction = 1) + 
+  theme_classic() + 
+  theme_minimal_grid() + 
+  ylim(-43, -10) + xlim(113, 154) +
+  #ylim(-43, -25) + xlim(140, 154) +
+  labs(x = 'Longitude', y = 'Latitude', color = 'Proportion \n< threshold',
+       subtitle = '') + 
+  facet_grid(month ~ decade)
+
+```"

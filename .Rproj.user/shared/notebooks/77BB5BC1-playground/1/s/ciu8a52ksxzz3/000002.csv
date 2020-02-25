@@ -1,0 +1,229 @@
+"0","```r
+#nc_folder <- 'C:/Projects/FuelMoisture/data/reanalysis/'
+#
+#nc_file <- nc_open(
+#  paste0(
+#    nc_folder, 'era5-climate.nc'))
+#
+#nc_timespan <- tibble(
+#  start = seq(1, 492, by = 12),
+#  end = seq(12, 492, by = 12)
+#)
+#
+#latlong <- vroom('C:/Projects/FuelMoisture/data/analysis/input/_monthsDry_v2.csv.g#z') %>%
+#  select(lat, long) %>%
+#  distinct()
+#
+#nc_attributes <- attributes(nc_file$var)$names
+#
+#for (i in 1:2) {#9:length(nc_attributes)) {
+#  nc_var <- nc_attributes[i]
+#  
+#  nc_lat <- ncvar_get(nc_file, 'latitude')
+#  nc_long <- ncvar_get(nc_file, 'longitude')
+#  nc_expver <- ncvar_get(nc_file, 'expver')
+#  nc_time <- ncvar_get(nc_file, 'time')
+#  
+#  nc_tibble <- list()
+#  
+#  for (j in 1:nrow(nc_timespan)) {
+#    tic(paste0('Processing ', nc_var, ': ', j + 1978))
+#    nc_start <- as.numeric(nc_timespan[j,'start'])
+#    nc_end <- as.numeric(nc_timespan[j,'end'])
+#    
+#    nc_vals <- ncvar_get(nc_file,
+#                     nc_var,
+#                     start = c(1,1,1,nc_start),
+#                     # this is literally a count, hence not using nc_end
+#                     count = c(-1,-1,-1,12))
+#    
+#    dimnames(nc_vals) <- list(long = nc_long, 
+#                          lat = nc_lat, 
+#                          expver = nc_expver,
+#                          time = nc_time[nc_start:nc_end])
+#    
+#    nc_tibble[[j]] <- melt(nc_vals, 
+#                      value.name = nc_var) %>%
+#      as_tibble() %>%
+#      right_join(latlong) %>%
+#      ## UQ(as.symbol()) <-> !! as.symbol()
+#      filter(!is.na(UQ(as.symbol(nc_var)))) %>% 
+#      mutate(time = as_datetime(c(time * 60 * 60), 
+#                                origin = '1900-01-01'),
+#             year = year(time),
+#             month = month(time)) %>%
+#      # no idea what expver is, tbh
+#      dplyr::select(-time, -expver)
+#    toc()
+#    
+#  }
+#  tic(paste0('Binding and writing ', nc_var))
+#  nc_tibble %>%
+#    bind_rows() %>%
+#    vroom_write(.,
+#                paste0(nc_folder, 
+#                       '/climate/', 
+#                       nc_var,
+#                       '.csv.gz'))
+#  toc()
+#  rm(nc_tibble)
+#}
+
+folder <- 'C:\\Projects\\FuelMoisture\\data\\reanalysis\\climate'
+files <- dir_ls(folder, glob = '*.csv.gz')
+monthsDry <- vroom('./input/_monthsDry_v2.csv.gz')
+
+# 243,170 = lat-long combinations
+tvl <- vroom(paste0(folder, '/tvl.csv.gz')) %>% 
+  dplyr::select(lat, long, tvl) %>%
+  distinct() 
+#vroom_write(tvl, paste0(folder, '/tvl_v2.csv.gz'))
+rm(tvl)
+
+tvh <- vroom(paste0(folder, '/tvh.csv.gz')) %>% 
+  dplyr::select(lat, long, tvh) %>%
+  distinct() 
+#vroom_write(tvh, paste0(folder, '/tvh_v2.csv.gz'))
+rm(tvh)
+
+slt <- vroom(paste0(folder, '/slt.csv.gz')) %>%
+  dplyr::select(lat, long, slt) %>%
+  distinct()
+#vroom_write(slt, paste0(folder, '/slt_v2.csv.gz'))
+rm(slt)
+
+cvh <- vroom(paste0(files[1])) 
+cvh %>%
+  dplyr::select(lat, long, cvh) %>%
+  distinct() %>%
+  vroom_write(., paste0(folder, '/output/cvh_v2.csv.gz'))
+rm(cvh)
+
+cvl <- vroom(files[2])
+cvl %>%
+  dplyr::select(lat, long, cvl) %>%
+  distinct() %>%
+  vroom_write(., paste0(folder, '/output/cvl_v2.csv.gz'))
+rm(cvl)
+
+tp <- vroom(paste0(folder, '/tp.csv.gz'))
+tpa <- tp %>%
+  group_by(lat, long, year) %>%
+  summarise(tp = sum(tp)) %>%
+  ungroup() %>%
+  left_join(tp %>%
+              right_join(monthsDry) %>%
+              group_by(lat, long, year) %>%
+              summarise(tpds = sum(tp)) %>%
+              ungroup())
+#vroom_write(tpa, paste0(folder, '/output/tp_v2.csv.gz'))
+rm(tpa); rm(tp)
+
+
+lai_hv <- vroom(paste0(folder, '/lai_hv.csv.gz'))
+## not really sure how to deal with this
+#lai_hv %>% 
+#  group_by(lat, long) %>% 
+#  summarise(lai_hv_max = max(lai_hv), 
+#            lai_hv_min = min(lai_hv), 
+#            lai_hv_r = lai_hv_max - lai_hv_min, 
+#            lai_hv_m = mean(lai_hv)) %>%
+#  vroom_write(paste0(folder, '/lai_hv_v2.csv.gz'))
+
+foo <- vroom(paste0(folder, '/lai_lv.csv.gz')) 
+bar <- foo %>%
+  group_by(lat, long) %>% 
+  summarise(lai_lv_max = max(lai_lv), 
+            lai_lv_min = min(lai_lv), 
+            lai_lv_r = lai_lv_max - lai_lv_min, 
+            lai_lv_m = mean(lai_lv))
+vroom_write(bar, paste0(folder, '/lai_lv_v2.csv.gz'))
+
+t2m <- vroom(paste0(folder, '/t2m.csv.gz'))
+t2ma <- t2m %>%
+  group_by(lat, long, year) %>%
+  summarise(mat = mean(t2m),
+            mhmt = max(t2m),
+            mcmt = min(t2m)) %>%
+  ungroup() %>%
+  left_join(t2m %>%
+              right_join(monthsDry) %>%
+              group_by(lat, long, year) %>%
+              summarise(mdst = mean(t2m)) %>%
+              ungroup())
+#vroom_write(t2ma, paste0(folder, '/output/t2m_v2.csv.gz'))
+rm(t2m); rm(t2ma)
+
+foo <- vroom(files[3])
+bar <- foo %>%
+  group_by(lat, long, year) %>%
+  summarise(mae = mean(e),
+            mhme = max(e),
+            mcme = min(e)) %>%
+  ungroup() %>%
+  left_join(foo %>%
+              right_join(monthsDry) %>%
+              group_by(lat, long, year) %>%
+              summarise(mdse = mean(e)) %>%
+              ungroup())
+#vroom_write(bar, paste0(folder, '/output/e_v2.csv.gz'))
+rm(foo); rm(bar)
+
+foo <- vroom(files[6])
+bar <- foo %>%
+  group_by(lat, long, year) %>%
+  summarise(mapev = mean(pev),
+            mhmpev = max(pev),
+            mcmpev = min(pev)) %>%
+  ungroup() %>%
+  left_join(foo %>%
+              right_join(monthsDry) %>%
+              group_by(lat, long, year) %>%
+              summarise(mdspev = mean(pev)) %>%
+              ungroup())
+#vroom_write(bar, paste0(folder, '/output/pev_v2.csv.gz'))
+rm(foo); rm(bar)
+
+foo <- vroom(paste0(folder, '/sf.csv.gz'))
+bar <- foo %>%
+  group_by(lat, long, year) %>%
+  summarise(sf = sum(sf)) %>%
+  ungroup() %>%
+  left_join(foo %>%
+              right_join(monthsDry) %>%
+              group_by(lat, long, year) %>%
+              summarise(sfds = sum(sf)) %>%
+              ungroup())
+vroom_write(bar, paste0(folder, '/output/sf_v2.csv.gz'))
+rm(foo); rm(bar)
+# same for sro and ssro
+foo <- vroom(paste0(folder, '/ssro.csv.gz'))
+bar <- foo %>%
+  group_by(lat, long, year) %>%
+  summarise(mssro = mean(ssro)) %>%
+  ungroup() %>%
+  left_join(foo %>%
+              right_join(monthsDry) %>%
+              group_by(lat, long, year) %>%
+              summarise(mdsssro = mean(ssro)) %>%
+              ungroup())
+vroom_write(bar, paste0(folder, '/output/ssro_v2.csv.gz'))
+rm(foo); rm(bar)
+
+foo <- vroom(paste0(folder, '/stl4.csv.gz'))
+bar <- foo %>%
+  group_by(lat, long, year) %>%
+  summarise(mastl4 = mean(stl4),
+            mhmstl4 = max(stl4),
+            mcmstl4 = min(stl4)) %>%
+  ungroup() %>%
+  left_join(foo %>%
+              right_join(monthsDry) %>%
+              group_by(lat, long, year) %>%
+              summarise(mdsstl4 = mean(stl4)) %>%
+              ungroup())
+vroom_write(bar, paste0(folder, '/output/stl4_v2.csv.gz'))
+rm(foo); rm(bar)
+
+
+```"

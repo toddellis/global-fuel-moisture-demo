@@ -1,0 +1,42 @@
+"0","```r
+tmp.pw <- ',*60vtsz'
+library(RPostgreSQL)
+library(tictoc)
+tmp.drv <- dbDriver('PostgreSQL')
+tmp.con <- dbConnect(tmp.drv,
+                     dbname = 'postgres',
+                     host = 'localhost',
+                     port = 5432,
+                     user = 'postgres',
+                     password = tmp.pw)
+rm(tmp.pw)
+
+tic()
+tmp.table <- vroom('C:/Projects/FuelMoisture/data/analysis/shiny/dead-fine-fuel-moisture-australia/input/fmc_australia.csv.gz')
+toc() # 1.04 minutes
+
+tmp.table_a <- vroom('C:/Projects/FuelMoisture/data/analysis/shiny/dead-fine-fuel-moisture-australia-2.0/input/fmc_australia.csv.gz')
+tmp.table_b <- vroom('C:\\Projects\\FuelMoisture\\data\\analysis\\shiny\\dead-fine-fuel-moisture-australia-2.0\\input\\ffmc_australia.csv.gz')
+
+dbWriteTable(tmp.con, 'fmc_global_oversize',
+             value = foo, append = TRUE, row.names = FALSE)
+
+tic()
+tmp.table_pg <- dbGetQuery(tmp.con, 
+                           'SELECT * FROM fmc_australia')
+toc() # 8.13 minutes
+
+# 1. read in full dataset
+foo <- vroom('C:/Projects/FuelMoisture/data/reanalysis/ffmc/fmc_global.csv.gz')
+# 2. extract fmc_global.csv.gz
+bar <- foo %>%
+  dplyr::select(long, lat, year, ecoID, fmc_prop, fmc_threshold)
+vroom_write(bar, 'fmc_global.csv.gz')
+# 3. extract ffmc_global.csv.gz
+rm(bar)
+bar <- foo %>%
+  dplyr::select(-fmc_prop, -fmc_threshold) %>%
+  unique()
+vroom_write(bar, 'ffmc_global.csv.gz')
+
+```"

@@ -5,15 +5,15 @@
     "dirty" : false,
     "encoding" : "UTF-8",
     "folds" : "",
-    "hash" : "0",
+    "hash" : "3961901493",
     "id" : "16BA0D35",
-    "lastKnownWriteTime" : 1582610168,
-    "last_content_update" : 1582610168409,
+    "lastKnownWriteTime" : 1582620330,
+    "last_content_update" : 1582620330734,
     "path" : "C:/Projects/Shiny/global-fuel-moisture-demo/ui.R",
     "project_path" : "ui.R",
     "properties" : {
-        "cursorPosition" : "65,32",
-        "scrollLine" : "0"
+        "cursorPosition" : "50,66",
+        "scrollLine" : "44"
     },
     "read_only" : false,
     "read_only_alternatives" : [

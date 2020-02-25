@@ -1,0 +1,163 @@
+"0","```r
+library(tidyverse)
+library(lubridate)
+library(vroom)
+library(fs)
+
+for (i in 1980:2018) {
+  foo <- read_csv(paste0('P:/fmc/ffmc-csv/ffmc_', i, '_global.csv')) %>%
+    mutate(month = month(date)) %>%
+    dplyr::select(lat, long, date, month, fmc) %>%
+    group_by(lat, long, month) %>%
+    mutate(n = n()) %>%
+    ungroup() %>%
+    group_by(month) %>%
+    filter(n == max(n)) %>%
+    ungroup()
+  
+  for (j in 1:12) {
+    bar <- foo %>%
+      filter(month == j) %>%
+      dplyr::select(-n, -month) %>%
+      vroom_write(paste0('C:/Projects/FuelMoisture/data/reanalysis/ffmc/dryseason/fullMonths_', j, '_', i, '.csv.gz'))
+    
+  }
+  rm(foo)
+  rm(bar)
+}
+
+
+# once done, need to combine each month's 40-year record
+# apply the same method to ensure each coordinate consistently covers the full month over 40 years
+
+for (i in 10:12) {
+  files <- dir_ls(path = 'C:/Projects/FuelMoisture/data/reanalysis/ffmc/dryseason/', glob = paste0('^*fullMonths_', i, '_', '*.csv.gz'))
+  
+  foo <- vroom(files) 
+  
+  if (i == 2) {
+    bar <- foo %>%
+      # re-add month length data 
+      mutate(year = year(date)) %>%
+      mutate(monthLength = 28) %>% # force to ignore 29
+      group_by(lat, long, monthLength) %>%
+      # getbar full coverage of month over time series
+      summarise(tsLength = n()) %>% 
+      ungroup()
+  } else {
+    bar <- foo %>%
+      # re-add month length data 
+      mutate(year = year(date)) %>%
+      group_by(lat, long, year) %>%
+      mutate(monthLength = n()) %>%
+      ungroup() %>%
+      group_by(lat, long, monthLength) %>%
+      # get full coverage of month over time series
+      summarise(tsLength = n()) %>% 
+      ungroup()
+  }
+  
+  baz <- foo %>%
+    inner_join(bar, by = c('long', 'lat')) %>%
+    filter((tsLength / monthLength) >= 30) %>%
+    # get mean fmc for each month per point
+    group_by(lat, long) %>%
+    summarise(fmc_avg = mean(fmc)) %>% # mutate(fmc_avg = mean(fmc)) %>%
+    ungroup() %>%
+    mutate(month = i)
+  
+  baz %>%
+    # removed after replacing mutate() with summarise() above
+    #mutate(month = month(date)) %>%
+    #dplyr::select(lat, long, month, fmc_avg) %>%
+    #distinct() %>% 
+    vroom_write(paste0('C:/Projects/FuelMoisture/data/reanalysis/ffmc/dryseason/fullMonths30YrAvg_', i, '.csv.gz'))
+  
+}
+
+# testing output
+tmp <- vroom('C:/Projects/FuelMoisture/data/reanalysis/ffmc/dryseason/1_1983.csv.gz') 
+
+foo %>%
+  group_by(lat, long, month(date)) %>%
+  filter(month(date) == 1) %>%
+  mutate(n = n()) %>%
+  ungroup() %>%
+  filter(n == max(n)) %>%
+  dplyr::select(-date, -fmc) %>%
+  unique() %>%
+  view()
+
+
+tmp %>%
+  group_by(lat, long) %>%
+  mutate(n = n()) %>%
+  ungroup() %>%
+  dplyr::select(n) %>%
+  group_by(n) %>%
+  mutate(sum = n()) %>%
+  unique() %>%
+  view()
+
+# 3. Rasterizing (maybe) and finding month of minimum FMC
+
+files <- dir_ls(path = 'C:/Projects/FuelMoisture/data/reanalysis/ffmc/dryseason/', glob = paste0('^*fullMonths30YrAvg', '*.csv.gz'))
+
+#tmp <- vroom('C:/Projects/FuelMoisture/data/reanalysis/ffmc/dryseason/fullMonthsAvg_1.csv.gz')
+tmp <- vroom(files)
+
+foo <- tmp %>%
+  group_by(lat, long) %>%
+  summarise(fmc_min = min(fmc_avg)) %>%
+  left_join(tmp, by = c('long', 'lat')) %>%
+  filter(fmc_avg == fmc_min) %>%
+  #ungroup() %>% group_by(lat, long) %>% summarise(n = n()) # 1:1!
+  dplyr::select(-fmc_min) %>%
+  mutate(long = ifelse(long > 180, long - 360, long))
+
+foo %>%
+  #mutate(color = as.factor(month)) %>%
+  ggplot(aes(x = long, y = lat, color = month)) +
+  geom_point() +
+  theme_classic() +
+  scale_color_gradientn(colors = rev(brewer.pal(11, 'RdBu'))) + 
+  theme(panel.background = element_rect(fill = \"#4E5D6C\"), #4E5D6C or #2B3E50
+        plot.background = element_rect(fill = '#4E5D6C'),
+        legend.background = element_rect(fill = \"#4E5D6C\"),
+        strip.background = element_rect(fill = '#2B3E50'),
+        panel.grid = element_line(color = '#2B3E50'),
+        axis.title = element_text(colour = \"grey85\", size = 22),
+        axis.title.x = element_text(margin = margin(t = 10)),
+        axis.title.y = element_text(margin = margin(r = 10, l = 10)),
+        axis.text = element_text(color = 'grey65', size = 16),
+        legend.position = 'bottom',
+        legend.text = element_text(color = 'grey65', size = 14),
+        legend.title = element_text(color = 'grey85', size = 15),
+        strip.text = element_text(color = 'grey65', size = 16))
+
+bar <- foo %>% 
+  mutate(long = ifelse(long > 180, long - 360, long)) %>%
+  dplyr::select(long, lat, month)
+bar <- SpatialPixelsDataFrame(bar[c('long', 'lat')], bar)
+
+ggplot() +
+  geom_sf(data = world_sf, fill = 'hotpink', color = 'black', size = 0.5/.pt, alpha = 0.3) +
+  gg(bar, aes(x = long, y = lat, fill = month)) +
+  scale_fill_gradientn(colors = rev(brewer.pal(11, 'RdBu'))) +
+  theme_classic() + 
+  theme(panel.background = element_rect(fill = \"#4E5D6C\"), #4E5D6C or #2B3E50
+        plot.background = element_rect(fill = '#4E5D6C'),
+        legend.background = element_rect(fill = \"#4E5D6C\"),
+        strip.background = element_rect(fill = '#2B3E50'),
+        panel.grid = element_line(color = '#2B3E50'),
+        axis.title = element_text(colour = \"grey85\", size = 22),
+        axis.title.x = element_text(margin = margin(t = 10)),
+        axis.title.y = element_text(margin = margin(r = 10, l = 10)),
+        axis.text = element_text(color = 'grey65', size = 16),
+        legend.position = 'bottom',
+        legend.text = element_text(color = 'grey65', size = 14),
+        legend.title = element_text(color = 'grey85', size = 15),
+        strip.text = element_text(color = 'grey65', size = 16))
+
+
+```"

@@ -1,0 +1,29 @@
+"0","```r
+foobar <- baz %>%
+  group_by(lat, long) %>%
+  nest() %>%
+  mutate(ts = map(data, ts, start = 1980)) %>%
+  mutate(sens = map(ts, sens.slope)) %>% 
+  mutate(sens = map(sens, glance)) %>%
+  unnest(sens)
+
+foobar %>%
+  ggplot(aes(x = long, y = lat, color = statistic, alpha = p.value)) +
+  geom_sf(data = filter(world_sf, 
+                        SOVEREIGNT == 'Australia', 
+                        TYPE == 'Country'), 
+          aes(x = LON, y = LAT), 
+          fill = 'white', color = 'black', 
+          size = 0.5/.pt, alpha = 0.9) +
+  geom_point(size = 3, shape = 'square') +
+  scale_color_viridis_c(option = 'B', direction = 1) + 
+  scale_alpha(trans = 'reverse') +
+  theme_classic() + 
+  theme_minimal_grid() + 
+  ylim(-43, -10) + xlim(113, 154) +
+  #ylim(-43, -25) + xlim(140, 154) +
+  labs(x = 'Longitude', y = 'Latitude', color = 'Annual change (%)',
+       title = 'Annual shifts in fine fuel moisture', 
+       subtitle = 'Sen\'s slope estimate for % of year < 8% FMC')
+
+```"

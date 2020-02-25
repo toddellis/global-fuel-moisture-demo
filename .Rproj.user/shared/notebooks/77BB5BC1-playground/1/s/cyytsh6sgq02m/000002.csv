@@ -1,0 +1,132 @@
+"0","```r
+fmc_daily <- read_csv('C:\\Projects\\FuelMoisture\\data\\analysis\\shiny\\fmc\\input\\fmc.csv')
+fmc_monthly <- read_csv('C:\\Projects\\FuelMoisture\\data\\analysis\\shiny\\fmc\\fmc_monthly.csv') 
+
+theme_strip <- theme_minimal()+
+                 theme(axis.text.y = element_blank(),
+                       axis.line.y = element_blank(),
+                       axis.title = element_blank(),
+                       panel.grid.major = element_blank(),
+                       legend.title = element_blank(),
+                       legend.position = 'right',
+                       axis.text.x = element_text(vjust = 3),
+                       panel.grid.minor = element_blank(),
+                        plot.title = element_text(size = 14, face = \"bold\")
+                       )
+col_strip <- brewer.pal(11, \"RdBu\")
+
+
+
+fmc %>% filter(#stateID == 'New South Wales',
+         threshold == 8) %>%
+  mutate(date = ymd(str_c(year, \"01-01\", sep = \"-\")),
+         lat_long = str_c(lat, long, sep = '-'),
+         response = fmc_prop) %>%
+  group_by(long, lat) %>%
+  mutate(response_s = scale(response)) %>%
+  ungroup() %>%
+  group_by(lat,year) %>%
+  mutate(response_lat = mean(response)) %>%
+  ungroup() %>%
+  group_by(lat) %>%
+  mutate(response_lat_s = scale(response_lat)) %>%
+  ungroup() %>%
+  group_by(lat, ecoIDy, year) %>%
+  mutate(response_lat_eco = mean(response)) %>%
+  ungroup() %>%
+  group_by(lat, ecoIDy) %>%
+  mutate(response_lat_eco_s = scale(response_lat_eco)) %>%
+  ungroup() %>%
+  group_by(stateID, ecoIDy, year) %>%
+  mutate(response_eco = mean(response)) %>%
+  ungroup() %>%
+  group_by(stateID, ecoIDy) %>%
+  mutate(response_eco_s = scale(response_eco)) %>%
+  ungroup() %>%
+  group_by(stateID, year) %>%
+  mutate(response_st = mean(response)) %>%
+  ungroup() %>%
+  group_by(stateID) %>%
+  mutate(response_st_s = scale(response_st)) %>%
+  ungroup() %>%
+  ggplot(aes(x = date, y = 1, fill = response_st_s))+
+  geom_tile()+
+  scale_x_date(date_breaks = \"6 years\",
+               date_labels = \"%Y\",
+               expand = c(0, 0))+
+  scale_y_continuous(expand = c(0, 0))+
+  scale_fill_gradientn(colors = rev(col_strip))+
+  guides(fill = guide_colorbar(barwidth = 1))+
+  labs(title = \"Tasmania dry season 1980-2018\",
+       caption = \"\")+theme_bw() +
+  theme_strip + 
+#  facet_grid(ecoIDy ~ .) 
+#  facet_grid(ecoIDy ~ stateID)
+  facet_grid(stateID ~ .)
+  #facet_grid(abs(lat) ~ ecoIDy)
+
+fmc_monthly %>% 
+  filter(stateID %in% c('TAS'),
+         fmc_threshold == 32) %>%
+  mutate(date = ymd(str_c(year, month, \"01\", sep = \"-\")),
+         lat_long = str_c(lat, long, sep = '-'),
+         response = fmc_prop) %>%
+  group_by(long, lat) %>%
+  mutate(response_s = scale(response)) %>%
+  ungroup() %>%
+  group_by(lat, year, month) %>%
+  mutate(response_lat = mean(response)) %>%
+  ungroup() %>%
+  group_by(lat) %>%
+  mutate(response_lat_s = scale(response_lat)) %>%
+  ungroup() %>%
+  group_by(lat, ecoIDy, year, month) %>%
+  mutate(response_lat_eco = mean(response)) %>%
+  ungroup() %>%
+  group_by(lat, ecoIDy) %>%
+  mutate(response_lat_eco_s = scale(response_lat_eco)) %>%
+  ungroup() %>%
+  group_by(stateID, ecoIDy, year, month) %>%
+  mutate(response_eco = mean(response)) %>%
+  ungroup() %>%
+  group_by(stateID, ecoIDy) %>%
+  mutate(response_eco_s = scale(response_eco)) %>%
+  ungroup() %>%
+  group_by(stateID, year, month) %>%
+  mutate(response_st = mean(response)) %>%
+  ungroup() %>%
+  group_by(stateID) %>%
+  mutate(response_st_s = scale(response_st)) %>%
+  ungroup() %>%
+  group_by(stateID, ecoIDy, month) %>%
+  mutate(response_eco_mo_s = scale(response_eco)) %>%
+  ungroup() %>%
+  ggplot(aes(y = factor(month), x = 1, fill = response_lat_s))+
+  geom_tile()+
+ # scale_x_date(date_breaks = \"6 years\",
+#               date_labels = \"%Y\",
+#               expand = c(0, 0))+
+  scale_x_continuous(expand = c(0, 0))+
+  scale_fill_gradientn(colors = rev(col_strip))+
+  guides(fill = guide_colorbar(barwidth = 1))+
+  labs(title = \"Tasmania dry season 1980-2018\",
+       caption = \"\")+
+  theme_strip + 
+#  facet_grid(ecoIDy ~ .) 
+#  facet_grid(ecoIDy ~ stateID)
+  #facet_grid(ecoIDy ~ year) +
+  facet_grid(abs(lat) ~ year) +
+  theme_minimal()+
+  theme(#axis.text.y = element_blank(),
+        axis.line.y = element_blank(),
+        axis.title = element_blank(),
+        panel.grid.major = element_blank(),
+        legend.title = element_blank(),
+        legend.position = 'right',
+        axis.text.x = element_text(vjust = 3),
+        panel.grid.minor = element_blank(),
+        plot.title = element_text(size = 14, face = \"bold\")
+  )
+
+
+```"

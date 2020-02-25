@@ -1,0 +1,56 @@
+"0","```r
+
+##### location-based modeling
+bar <- foo %>% 
+  group_by(lat, long, year2, season) %>%
+#  mutate(fmc_mean = mean(fmc)) %>%
+  ungroup() %>%
+  dplyr::select(-day, -date, -ffmc) %>%
+  as_tibble() %>%
+  unique()
+
+baz <- bar %>%
+  dplyr::select(long, lat, year, fmc_ann) %>%
+  arrange(lat, long, year) %>%
+  mutate(yearx = year - min(year)) %>%
+  group_by(lat, long) %>%
+  mutate(fmc_delta = fmc_ann - 
+           data.table::shift(fmc_ann, type = 'lead')) %>%
+  ungroup() %>% 
+  group_by(lat, long) %>%
+  mutate(fmc_delta_avg = mean(fmc_delta, na.rm = T)) %>%
+  unique()
+
+gam.ann <- baz %>%
+  gam((fmc_ann) ~
+        s(yearx) + s(lat) + s(long) +
+        te(lat, long, yearx),
+      data = .,
+      method = 'REML') 
+
+
+
+summary(gam.ann); AIC(gam.ann)
+# s(yearx) + s(lat) + s(long) + te(lat, long, yearx) : -52813.14
+# s(yearx) + te(long, lat, yearx) : -46993.49
+# s(yearx) + s(lat) + te(lat, long, yearx) : -47485.35
+# s(yearx) + s(long, lat) + ti(long, lat, yearx) : -46148.18
+# s(yearx) + te(long, lat) : -46034.64
+
+gam.check(gam.ann)
+
+plot.gam(gam.ann,
+         residuals = T, 
+         shade = T, 
+         pages = 1, 
+         all.terms = T, 
+         rug = T, 
+         pch = 1, 
+         cex = 1, 
+         shade.col = 'lightblue', 
+         seWithMean = T, 
+         shift = coef(gam.ann)[1])
+
+vis.gam(gam.ann, view = c('lat', 'yearx'), theta = 150, too.far = 0.1 )
+
+```"

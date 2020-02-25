@@ -1,0 +1,101 @@
+"0","```r
+
+#folder <- 'C:/Projects/FuelMoisture/data/analysis/input/'
+#fmc_thresh <- vroom(paste0(folder, 'fmc_global_regtree_v2.csv.gz'))
+#fmc_thresh <- fmc_thresh %>%
+#  dplyr::select(-c(fmc_frpm_median_err, fmc_frpm_min_err, 
+#                   fmc_ba_median_err, fmc_ba_min_err)) %>%
+#  gather(fmc_type, fmc_threshold, 
+#         -c(long, lat)) %>% 
+#  left_join(fmc_thresh %>% 
+#              dplyr::select(-c(fmc_frpm_median, fmc_frpm_min,
+#                               fmc_ba_median, fmc_ba_min)) %>%
+#              gather(fmc_type, fmc_error, 
+#                     -c(long, lat)) %>% 
+#              mutate(fmc_type = str_replace(fmc_type, '_err', ''))) %>%
+#  filter(!is.na(fmc_error)) %>%
+#  mutate(fmc_source = factor(str_extract(fmc_type, '(frpm|ba)'), 
+#                             levels = c('frpm', 'ba'),
+#                             labels = c('Fire radiative power', 'Burned area')),
+#         fmc_method = as.factor(str_to_title(str_extract(fmc_type, #'(median|min)')))) %>%
+#  dplyr::select(-fmc_type) %>%
+#  distinct()
+#
+#fmc_rt <- vroom(paste0(folder, 'fmc_global_regtree_v2_prop.csv.gz'))  %>%
+#  gather(fmc_type, fmc_prop, 
+#         -c(long, lat, year)) %>%
+#  filter(!is.na(fmc_prop)) %>%
+#  mutate(fmc_source = factor(str_extract(fmc_type, '(frpm|ba)'), 
+#                             levels = c('frpm', 'ba'),
+#                             labels = c('Fire radiative power', 'Burned area')),
+#         fmc_method = as.factor(str_to_title(str_extract(fmc_type, #'(median|min)')))) %>%
+#  dplyr::select(-fmc_type) %>%
+#  left_join(fmc_thresh)
+
+fmc_rt <- vroom('./input/fmc_global_v3.csv.gz')
+#### fuckery below
+
+fmc_rt_avg <- fmc_rt %>%
+  left_join(ecoID) %>%
+  group_by(year, ecoID) %>%
+  summarise(fmc_prop_frpm_median = mean(fmc_prop_frpm_median, na.rm = T),
+            fmc_prop_frpm_min = mean(fmc_prop_frpm_min, na.rm = T),
+            fmc_prop_ba_median = mean(fmc_prop_ba_median, na.rm = T),
+            fmc_prop_ba_min = mean(fmc_prop_ba_min, na.rm = T)) %>%
+  gather(method, fmc_prop, -year, -ecoID) %>%
+  mutate(source = case_when(str_detect(method, '_frpm_') ~ 'Fire radiative power',
+                            str_detect(method, '_ba_') ~ 'Burned area'),
+         stat = case_when(str_detect(method, '_median') ~ 'Median',
+                          str_detect(method, '_min') ~ 'Minimum'))
+
+fmc_rt_avg %>%
+  filter(year >= 1980,
+         !is.na(ecoID)) %>%
+  ggplot(aes(x = year, y = fmc_prop * 100, color = source, group = source)) +
+  theme_classic() +
+  theme(legend.position = 'bottom') +
+  geom_line(alpha = 0.4) +
+  geom_line(stat = 'smooth',
+            method = 'gam', 
+            formula = y ~ s(x, k = 7),
+            se = F,
+            size = 1.35,
+            alpha = 0.7) +
+  facet_grid(stat ~ ecoID, scales = 'free') +
+  labs(color = '',
+       y = '% of dry season',
+       x = '',
+       title = 'Average global fuel moisture-fire threshold relationships',
+       subtitle = 'Proportion of local dry seasons with fuel moisture under locally-determined thresholds') +
+  scale_color_manual(values = pal_neuromancer[c(1,3)])
+
+#ggsave('omfg.png', dpi = 720, width = 9.5, height = 7)
+ggsave('tmp.png', dpi = 720, width = 21.5, height = 18.5)
+
+fmc_rt %>%
+  filter(#year %in% c(1980, 2018),
+         fmc_source == 'Burned area',
+         #fmc_threshold <= 32,
+         fmc_method == 'Median') %>%
+  ggplot(aes(x = long, y = lat, 
+             fill = fmc_prop,
+             alpha = -fmc_threshold)) +
+  geom_tile() +
+  theme_classic() +
+  #facet_grid((fmc_threshold <= 32) ~ year) + 
+  facet_wrap(~year) +
+  scale_fill_gradientn(colors = pal_neuromancer) +
+  #xlim(-125, -115) + ylim(40, 50)
+  #coord_cartesian(xlim = c(135, 150),
+  #                ylim = c(-45, -27))
+  coord_cartesian(xlim = c(-125, -115),
+                  ylim = c(40, 50))
+
+
+fmc_dec <- fmc_rt %>%
+  mutate(decade = as.factor(year - (year %% 10))) %>%
+  group_by(lat, long, decade, fmc_source, fmc_method, fmc_threshold) %>%
+  summarise(fmc_prop = mean(fmc_prop)) 
+  
+
+```"

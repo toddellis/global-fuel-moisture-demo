@@ -1,0 +1,6 @@
+"0","```r
+fmc_lm_surface$burnedArea <- predict.lm(fmc_lm, newdata = fmc_lm_surface)
+
+```"
+"1","Error in eval(predvars, data, env) : object 'mhmt' not found
+"

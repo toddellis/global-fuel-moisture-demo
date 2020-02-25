@@ -1,0 +1,82 @@
+"0","```r
+foo <- fmc_rt %>% 
+  filter(fmc_source == 'Burned area', 
+         fmc_method == 'Median', 
+         year >= 1980) %>% 
+  dplyr::select(-fmc_source, -fmc_method) %>%
+  mutate(decade = year - (year %% 10))
+
+
+## regional line-plot
+bar <- fmc_rt %>%
+  ### study area to improve processing speed
+  ## Okanogan
+  #filter(between(long, -120, -118),
+  #       between(lat, 47.5, 49.5))
+  ## BC
+  #filter(between(long, -128, -115),
+  #       between(lat, 48, 58))
+  ## PNW
+  #filter(between(long, -125, -115),
+  #       between(lat, 40, 50)) 
+  ## NSW/TAS
+  filter(between(long, 135, 155),
+         between(lat, -45, -27)) 
+  ## just TAS
+  #filter(between(long, 140, 150),
+  #       between(lat, -45, -39))
+  ## SW WA
+  #filter(between(long, 112, 121),
+  #       between(lat, -35, -28))
+  ## Spain/Portugal
+  #filter(between(long, -13, -3),
+  #       between(lat, 33, 47)) 
+  ## Brazil
+  #filter(between(long, -75, -35),
+  #       between(lat, -30, -0)) 
+
+bar %>%
+  filter(year >= 1980) %>%
+  #group_by(fmc_source, fmc_method, year) %>%
+  #summarise(fmc_prop = mean(fmc_prop)) %>%
+  ggplot(aes(x = year, y = fmc_prop * 100, 
+             color = fmc_source)) +
+  theme_classic() +
+  theme(legend.position = 'bottom') +
+  geom_point(alpha = 0.15) +
+  #geom_line() +
+  geom_line(stat = 'smooth',
+            method = 'gam', 
+            formula = y ~ s(x, k = 7),
+            se = F,
+            size = 1.35,
+            alpha = 0.7) +
+  facet_wrap(. ~ fmc_method, scales = 'free') +
+  labs(color = '',
+       y = '% of dry season',
+       x = '',
+       title = 'Average global fuel moisture-fire threshold relationships',
+       subtitle = 'Proportion of local dry seasons with fuel moisture under locally-determined thresholds') +
+  scale_color_manual(values = pal_neuromancer[c(1,3)])
+
+### map
+baz <- bar %>%
+  filter(fmc_source == 'Burned area', 
+         fmc_method == 'Median', 
+         year >= 1980) %>% 
+  dplyr::select(-fmc_source, -fmc_method) %>%
+  mutate(decade = year - (year %% 10)) %>%
+  group_by(lat, long, decade) %>%
+  summarise(fmc_prop = mean(fmc_prop),
+            fmc_threshold = unique(fmc_threshold))
+
+baz %>%
+  ggplot(aes(x = long, y = lat, 
+             fill = fmc_prop)) +
+  geom_tile() +
+  theme_classic() +
+  scale_fill_gradientn(colors = rev(pal_greeneyes)) +
+  facet_wrap(~decade)
+
+
+```"

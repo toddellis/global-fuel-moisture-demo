@@ -1,0 +1,63 @@
+"0","```r
+HDFd <- 'C:/Projects/FuelMoisture/data/gfed'
+fhdf <-list.files(HDFd, pattern=\".hdf5\", full.names=T)
+
+for (i in 1:length(fhdf)) {
+  file.h5 <- h5file(fhdf[i], mode = 'r+')
+  name <- substring(fhdf[i], 1, nchar(fhdf[i]) - 5)
+  for (j in 1:12) {
+    data = file.h5[[paste0('burned_area/',sprintf(\"%02d\", as.numeric(j)),'/burned_fraction')]]
+    mat = data$read()
+    out_raster = raster(t(mat), xmn=-180, ymn=-90, xmx=180, ymx=90,
+                        crs=\"+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs\")
+    writeRaster(out_raster, paste0(name, sprintf(\"%02d\", as.numeric(j)), '.tif'))
+  }
+}
+
+##### Pull in monthly GFED data and resample it to Australia focus
+gfed <- 'C:/Projects/FuelMoisture/data/analysis/input/gfed/'
+gfed_ls <-list.files(gfed, pattern=\".tif\", full.names=T)
+
+for (i in 1:length(gfed_ls)) {
+  tmp <- raster::resample(raster(gfed_ls[i]), template, method = 'bilinear')
+  writeRaster(tmp, paste0(gfed_ls[i], 'resample.tif'))
+}
+
+gfed <- 'C:/Projects/FuelMoisture/data/analysis/input/gfed/resample/'
+gfed_ls <-list.files(gfed, pattern=\".tif\", full.names=T)
+gfed_st <- stack(gfed_ls) %>%
+  rasterToPoints() %>%
+  as_tibble() %>% 
+  gather(file, fire, -x, -y) %>%
+  rename(long = x, lat = y) %>%
+  mutate(date = as.Date( paste0( as.character( as.numeric( 
+    gsub('[^[:digit:]]', '', file)) - 41000000), '01'), '%Y%m%d'),
+         month = month(date),
+         year = year(date)) %>%
+  dplyr::select(-file, -date)
+
+# using monthsDry, made below
+gfed <- monthsDry %>%
+  merge(gfed_st, by = c('long', 'lat', 'month')) %>%
+  as_tibble() %>%
+  group_by(long, lat, year) %>%
+  mutate(fireSeason = sum(fire)) %>%
+  dplyr::select(-month, -fire) %>%
+  unique()
+
+### Early experiment 2019-09-24
+#HDFd <- 'C:/Projects/FuelMoisture/data/gfed'
+#out_tiff <- 'C:/Projects/FuelMoisture/data/gfed/tiff'
+#hdf_dir <- list.files(HDFd, pattern = '.hdf5', F)
+#fhdf <-list.files(HDFd, pattern=\".hdf5\", full.names=T)
+#infile <- hdf_dir[1]
+
+#gdalinfo(fhdf)
+
+#namefi <- substring(hdf_dir[1], 1, nchar(hdf_dir[1]) - 5)
+#outfile <- paste0(out_tiff, '/', namefi,\".tif\")
+#sds <- get_subdatasets(fhdf[1])
+
+#gdal_translate(fhdf[1], outfile, sds = T, sd_index=1)
+
+```"

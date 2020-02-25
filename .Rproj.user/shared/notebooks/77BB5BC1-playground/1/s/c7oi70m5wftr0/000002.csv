@@ -1,0 +1,45 @@
+"0","```r
+
+loc.mod <- function(df, x = fmc_min) {
+  
+  gam(x ~
+        s(yearx) +#, by = season) + 
+       # season +
+        te(lat, long),
+      data = df)
+}
+
+loc.mod <- function(df) {  
+#  gls(fmc_mean ~ 
+#  lme(fmc_mean ~
+#  lme(fmc ~
+#  lm(fmc_mean ~
+  lm(fmc ~
+        yearx,
+#      random = ~ 1 | yearx,
+#      random = ~ day | yearx,
+#      correlation = corAR1(form = ~ yearx),
+      data = df)
+}
+
+loc.run <- baz %>%
+  #group_by(season) %>%
+  nest() %>%
+  mutate(model = map(data, loc.mod)) %>%
+  mutate(resid = map2(data, model, add_residuals),
+         pred = map2(data, model, add_predictions),
+         aug = map(model, augment),
+         tidy = map(model, tidy),
+         glance = map(model, glance))
+
+loc.resid <- unnest(loc.run, resid) %>%
+  dplyr::select(-data, -model, -pred, -aug, -tidy, -glance)
+loc.pred <- unnest(loc.run, pred) %>%
+  dplyr::select(-data, -model, -resid, -aug, -tidy, -glance)
+loc.aug <- unnest(loc.run, aug) %>%
+  dplyr::select(-data, -model, -resid, -pred, -tidy, -glance)
+loc.tidy <- unnest(loc.run, tidy) %>% 
+  dplyr::select(-data, -model, -resid, -pred, -aug, -glance)
+loc.glance <- unnest(loc.run, glance) %>%
+  dplyr::select(-data, -model, -resid, -pred, -aug, -tidy)
+```"

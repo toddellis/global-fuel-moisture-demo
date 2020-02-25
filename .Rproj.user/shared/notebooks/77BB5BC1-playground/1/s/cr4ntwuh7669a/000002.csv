@@ -1,0 +1,13 @@
+"0","```r
+dem <- vroom(paste0(folder, 'elevation.csv.gz')) %>%
+  mutate(lat = lat + 0.125,
+         long = long + 0.125)
+
+```"
+"1","[1mObservations:[22m 1,036,800
+[1mVariables:[22m 3
+[32mdbl[39m [3]: long, lat, elev
+
+[90mCall `spec()` for a copy-pastable column specification[39m
+[90mSpecify the column types with `col_types` to quiet this message[39m
+"

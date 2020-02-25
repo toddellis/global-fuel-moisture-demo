@@ -1,0 +1,2601 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r, warning = F, results='hide', message = F}
+library(cffdrs)
+library(tidyverse)
+library(lubridate)
+library(broom) # glance + augment
+library(modelr) # add_residuals + add_predictions
+library(rworldmap) # getMap
+library(cowplot)
+library(vroom)
+library(fs)
+library(eddi)
+library(devtools)
+library(plotly)
+library(RColorBrewer)
+#devtools::source_gist("00772ccea2dd0b0f1745", filename = "000_geom_bag.r")
+#devtools::source_gist("00772ccea2dd0b0f1745", filename = "001_bag_functions.r")
+#devtools::install_github("earthlab/eddi") # maybe -- if we look into using EDDI
+
+library(sf)
+library(sp)
+library(raster)
+library(rgdal)
+library(rgeos)
+library(leaflet)
+library(mapview)
+library(maptools)
+library(rasterVis)
+library(reshape2)
+library(inlabru) # gg()
+
+library(h5)
+library(ncdf4)
+library(hdf5r)
+library(gdalUtils)
+library(lwgeom)
+
+library(mgcv) # gam
+library(nlme) # lme
+
+library(trend) # sens.slope
+library(zyp) # zyp.sen
+
+### functions
+ktf <- function(x) {
+  (x -273.15) * 9/5 + 32
+}
+
+#no longer needed
+#gdal_chooseInstallation(hasDrivers="HDF5")
+#getOption("gdalUtils_gdalPath")[[
+#  gdal_chooseInstallation(hasDrivers="HDF5")]]$version
+
+data(test_fbp)
+data(test_fwi)
+world_sf <- st_as_sf(getMap(resolution = 'low'))
+
+### Palettes
+# random colors
+pal_vapor1 <- c('#ff71ce', '#01cdfe', '#05ffa1', '#b967ff', '#fffb96')
+# neon pink-blue-turq
+pal_neon <- c('#ff00c1', '#9600ff', '#4900ff', '#00b8ff', '#00fff9')
+# pink-turq-blue
+pal_vapor2 <- c('#FF6AD5', '#C774E8', '#AD8CFF', '#8795E8', '#94D0FF')
+# sunset
+pal_sunset <- c('#feda84', '#ff9b83', '#976393', '#685489', '#43457f')
+# pastel sad
+pal_sad <- c('#d0b9e4', '#e1abd4', '#b583b8', '#a253a1', '#88c7bc')
+# pastel
+pal_pastel <- c('#cbffe6', '#afe9ff', '#bfb9ff', '#ffcfea', '#feffbe')
+# arizona tea
+pal_tea <- c('#fc78b7', '#fd9bca', '#ffffff', '#74f6e8', '#9387f7')
+# sunrise
+pal_sunrise <- c('#ffa3ac', '#ffae97', '#ffba81', '#ffc56c', '#ffd156')
+# cyberpunk neons
+pal_cyberneon <- c('#51e6ff', '#00ccfd', '#fd34b2', '#1bf913', '#1f0f47')
+# cyberpunk muted
+pal_cybermute <- c('#18030e', '#7b1346', '#c13268', '#32c18b', '#73c2d0')
+# cyberpunk 2019
+pal_cyber19 <- c('#0c4383', '#22a0b6', '#00ff9f', '#7b1346', '#cb0c59')
+# cyberpunk dark neon
+pal_cyberpunk <- c('#711c91', '#ea00d9', '#0abdc6', '#133e7c', '#091833')
+# cyberpunk drab
+pal_cyberdrab <- c('#9c9c9c', '#6d6d6d', '#633200', '#7e0000', '#000000')
+# cyberpunk synth
+pal_cybersynth <- c('#00ff9f', '#00b8ff', '#001eff', '#bd00ff', '#d600ff')
+# cyberpunk drab 2 -- 3-4 colors blend together....
+pal_cyberdrab2 <- c('#467fa1', '#54295c', '#061f2b', '#1e0f1d', '#5e0b0b')
+# halloweenpunk
+pal_halloween <- c('#ea7c4c', '#94f66d', '#56d465', '#845dc1', '#6834ab')
+# pink to punk
+pal_pinkpunk <- c('#00ff8f', '#4da57e', '#767c79', '#b44c7a', '#c83073')
+# moth punk
+pal_mothpunk <- c('#103f54', '#3a7068', '#affbba', '#d055bc', '#7e429f')
+# fallpunk
+pal_fall <- c('#f58169', '#f2ba91', '#b8a082', '#65a186', '#3e7d75')
+# lolipop punk
+pal_lolipop <- c('#fca7e0', '#ad3ebd', '#b2c6f7', '#4c4c4c', '#000000')
+
+pal_neuromancer <- c('#fd34b2','#1f0f47', '#51e6ff')
+pal_neuromancer_b <- c('#fd34b2','#000000', '#51e6ff')
+pal_greeneyes <- c('#fd34b2', '#1f0f47', '#1bf913')
+pal_greeneyes_b <- c('#fd34b2', '#000000', '#1bf913')
+
+pal_utas <- c("#E32412", "#F3786D", "#F7A49E",
+              "#595959", "#808080", "#BFBFBF", 
+              "#bf0813", "d8d8d8")
+
+
+```
+
+```{r test}
+test_fbp %>%
+  fbp('All') %>%
+  head()
+
+test_fbp %>%
+  fbp('All') %>%
+  ggplot(aes(
+    x = (147.27 * ( ( 101 - FFMC ) / (59.5 + FFMC) ) ), 
+    y = CFB)) +
+  theme_bw() +
+  geom_vline(xintercept = c(10), size = 1, 
+             alpha = 0.15, color = 'grey40') +
+  geom_vline(xintercept = c(8), size = 1.25, 
+             alpha = 0.25, color = 'grey40') +
+  geom_point(aes(color = FD)) +
+  geom_smooth(se = F, method = 'lm', 
+              formula = y ~ splines::bs(x, 3),
+              color = 'grey60') +
+  geom_line(stat = 'smooth', se = F, method = 'lm', 
+            size = 1, alpha = 0.25, 
+            aes(color = FD))
+
+
+test_fbp %>%
+  fbp('All') %>%
+  ggplot(aes(
+    x = (147.27 * ( ( 101 - FFMC ) / (59.5 + FFMC) ) ), 
+    y = ROS)) +
+  theme_bw() +
+  geom_vline(xintercept = c(10), size = 1, 
+             alpha = 0.15, color = 'grey40') +
+  geom_vline(xintercept = c(8), size = 1.25, 
+             alpha = 0.25, color = 'grey40') +
+  geom_point(aes(color = FD)) +
+  geom_smooth(se = F, method = 'lm', 
+              formula = y ~ splines::bs(x, 3),
+              color = 'grey60') +
+  geom_line(stat = 'smooth', se = F, method = 'lm', 
+            size = 1, alpha = 0.25, 
+            aes(color = FD))
+
+
+test_fwi %>%
+  fwi() %>%
+  head()
+
+test_fwi %>%
+  fwi() %>%
+  ggplot(aes(x = RH, y = (101 - FFMC))) +
+  theme_bw() +
+  geom_point() +
+  scale_y_log10() + 
+  geom_bag()
+
+#ggsave('fwi_rh.png', dpi = 720, width = 8, height = 6)
+
+```
+
+```{r eddi}
+eddi <- get_eddi(date = '2018-11-29', timescale = '1 month')
+
+color_pal <- colorRampPalette(c('blue', 'lightblue', 'white', 'pink', 'red'))
+raster::plot(foo, col = color_pal(255), main = 'EDDI data for 2018-11-29')
+
+foo %>%
+  as.data.frame() %>%
+  head()
+
+theme_set(theme_classic() + theme(axis.text.x = element_text(angle = -90, hjust = 1)))
+
+bar <- gplot(foo) + 
+  geom_tile(aes(fill = value)) + 
+#  facet_wrap(~ variable) + # pointless here
+  scale_fill_gradientn(colors = c("blue", "lightblue", "white", "pink", "red"),
+                       na.value = NA)
+
+bar
+
+foo <- get_eddi(date = c(
+  '2018-01-30', 
+  '2018-02-28', 
+  '2018-03-30', 
+  '2018-04-30', 
+  '2018-05-30', 
+  '2018-06-30', 
+  '2018-07-30', 
+  '2018-08-30', 
+  '2018-09-30', 
+  '2018-10-30', 
+  '2018-11-30', 
+  '2018-12-30'), 
+  timescale = '1 month')
+
+bar <- get_eddi(date = c(
+  '2000-08-30',
+  '2001-08-30',
+  '2002-08-30',
+  '2003-08-30',
+  '2004-08-30',
+  '2005-08-30',
+  '2006-08-30',
+  '2007-08-30',
+  '2008-08-30',
+  '2009-08-30',
+  '2010-08-30',
+  '2011-08-30',
+  '2012-08-30',
+  '2013-08-30',
+  '2014-08-30',
+  '2015-08-30',
+  '2016-08-30',
+  '2017-08-30',
+  '2018-08-30',
+  '2019-08-30'),
+  timescale = '3 month')
+
+
+
+
+names(bar) <- c('2000', '2001', '2002', '2003', '2004', '2005', '2006', '2007', '2008', '2009', '2010', '2011', '2012', '2013', '2014', '2015', '2016', '2017', '2018', '2019')
+
+names(bar) <- c('2007', '2008', '2009', '2010', '2011', '2012', '2013', '2014', '2015')
+
+
+bar <- get_eddi(date = c(
+  '2007-08-30',
+  '2008-08-30',
+  '2009-08-30',
+  '2010-08-30',
+  '2011-08-30',
+  '2012-08-30',
+  '2013-08-30',
+  '2014-08-30',
+  '2015-08-30'),
+  timescale = '3 month')
+
+gplot(bar) + 
+  geom_tile(aes(fill = value)) + 
+  scale_fill_gradientn(colors = c("blue", "lightblue", "white", "pink", "red"),
+                       na.value = NA) +
+  coord_equal(xlim = c(-125, -115), ylim = c(40, 50), expand = c(0, 0)) + 
+  facet_wrap(~ variable, ncol = 3)
+
+#ggsave('tempEDDI_3mo08_2007-2015.png', dpi = 720)
+
+```
+
+The following is the method to extract burned area data from the GFED datasets, completed 2019-09-24.
+
+```{r gfed}
+HDFd <- 'C:/Projects/FuelMoisture/data/gfed'
+fhdf <-list.files(HDFd, pattern=".hdf5", full.names=T)
+
+for (i in 1:length(fhdf)) {
+  file.h5 <- h5file(fhdf[i], mode = 'r+')
+  name <- substring(fhdf[i], 1, nchar(fhdf[i]) - 5)
+  for (j in 1:12) {
+    data = file.h5[[paste0('burned_area/',sprintf("%02d", as.numeric(j)),'/burned_fraction')]]
+    mat = data$read()
+    out_raster = raster(t(mat), xmn=-180, ymn=-90, xmx=180, ymx=90,
+                        crs="+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs")
+    writeRaster(out_raster, paste0(name, sprintf("%02d", as.numeric(j)), '.tif'))
+  }
+}
+
+##### Pull in monthly GFED data and resample it to Australia focus
+gfed <- 'C:/Projects/FuelMoisture/data/analysis/input/gfed/'
+gfed_ls <-list.files(gfed, pattern=".tif", full.names=T)
+
+for (i in 1:length(gfed_ls)) {
+  tmp <- raster::resample(raster(gfed_ls[i]), template, method = 'bilinear')
+  writeRaster(tmp, paste0(gfed_ls[i], 'resample.tif'))
+}
+
+gfed <- 'C:/Projects/FuelMoisture/data/analysis/input/gfed/resample/'
+gfed_ls <-list.files(gfed, pattern=".tif", full.names=T)
+gfed_st <- stack(gfed_ls) %>%
+  rasterToPoints() %>%
+  as_tibble() %>% 
+  gather(file, fire, -x, -y) %>%
+  rename(long = x, lat = y) %>%
+  mutate(date = as.Date( paste0( as.character( as.numeric( 
+    gsub('[^[:digit:]]', '', file)) - 41000000), '01'), '%Y%m%d'),
+         month = month(date),
+         year = year(date)) %>%
+  dplyr::select(-file, -date)
+
+# using monthsDry, made below
+gfed <- monthsDry %>%
+  merge(gfed_st, by = c('long', 'lat', 'month')) %>%
+  as_tibble() %>%
+  group_by(long, lat, year) %>%
+  mutate(fireSeason = sum(fire)) %>%
+  dplyr::select(-month, -fire) %>%
+  unique()
+
+### Early experiment 2019-09-24
+#HDFd <- 'C:/Projects/FuelMoisture/data/gfed'
+#out_tiff <- 'C:/Projects/FuelMoisture/data/gfed/tiff'
+#hdf_dir <- list.files(HDFd, pattern = '.hdf5', F)
+#fhdf <-list.files(HDFd, pattern=".hdf5", full.names=T)
+#infile <- hdf_dir[1]
+
+#gdalinfo(fhdf)
+
+#namefi <- substring(hdf_dir[1], 1, nchar(hdf_dir[1]) - 5)
+#outfile <- paste0(out_tiff, '/', namefi,".tif")
+#sds <- get_subdatasets(fhdf[1])
+
+#gdal_translate(fhdf[1], outfile, sds = T, sd_index=1)
+
+```
+
+```{r modis-burned-area}
+folder <- 'C:\\Projects\\FuelMoisture\\data\\modis\\MCD64CMQ\\C6\\'
+files <- dir_ls(folder, glob = '*.hdf')
+foobar <- list()
+
+#foo %>% rasterToPoints() %>% as_tibble() %>% rename(long = 1, lat = 2, burnedArea = 3) %>% arrange(long, lat) %>% tail(500) %>% mutate(long = (long / 4) - 0.125, lat = (lat / 4) - 0.125) %>% view()
+
+for (i in 1:length(files)) {
+  # pull temporary date from filename
+  tmp_date <- as.Date( substr( files[i], 59, 65), '%Y%j')
+  # 1. extract burned area layer from HDF4 format
+  # list of subdatasets
+  # 0: burned area
+  # 1: QA
+  # 2: unmapped fraction
+  # 3: land cover distribution
+  foobar[[i]] <- get_subdatasets(paste0( files[i] ) )[1] %>%
+    # transform from HDF4 to raster format
+    raster() %>%
+    # transform to matrix and then tibble
+    rasterToPoints() %>%
+    as_tibble() %>%
+    # rename columns to fit our usual format
+    rename(long = 1, lat = 2, burnedArea = 3) %>%
+    # transform grid numbers to WGS84 coordinates 
+    # need to keep in mind the +- 0.125 might be the wrong direction
+    mutate(long = (long / 4) + 0.125 - 180, 
+           lat = (lat / 4) + 0.125 - 90,
+           # create month and year columns
+           month = lubridate::month( tmp_date ),
+           year = lubridate::year( tmp_date ))
+}  
+  
+foobar <- bind_rows(foobar)
+
+tmp <- monthsDry %>%
+  left_join(foobar, by = c('long', 'lat', 'month'))
+
+tmp2 <- tmp %>%
+  group_by(lat, long, year) %>%
+  filter(burnedArea > 0) %>%
+  summarise(burnedArea = sum(burnedArea)) %>%
+  ungroup()
+
+# original method: writing a tif from each burned layer (fuck that!)
+#for (i in 1:length(files)) {
+#  # extract year & day for record
+#  file_name <- paste0(
+#    './input/modis/burned_area/tif/modis_ba_', 
+#    substr(files[i], 59, 65),
+#    '.tif'
+#  )
+#  
+#  # list of subdatasets
+#  # 0: burned area -- the only one we need
+#  # 1: QA
+#  # 2: unmapped fraction
+#  # 3: land cover distribution
+#  foo <- get_subdatasets( paste0( files[i] ) )[1]
+#  
+#  # write a tif
+#  gdal_translate(foo, dst_dataset = file_name)
+#  
+#  rm(foo)
+#}
+
+##### later steps, resampling the slightly-off BA resolution to match everything else
+### long range: -179.75 : 180
+### lat range: -54.5 : 70
+tmp_hotspot <- vroom('./input/_modis_burnedArea.csv.gz') %>%
+  filter(year >= 2002) %>%
+  # revert long-lat to original coordinates
+  mutate(long = long - 0.125,
+         lat = lat - 0.125)
+
+# create template raster
+x <- raster(xmn = -180, #min(tmp_hotspot$long), 
+            xmx = 180, #max(tmp_hotspot$long), 
+            ymn = -90, #min(tmp_hotspot$lat), 
+            ymx = 90, #max(tmp_hotspot$lat), 
+            res = 0.25, 
+            crs = "+proj=longlat +datum=WGS84")
+
+template <- raster::raster('C:\\Projects\\FuelMoisture\\data\\reanalysis\\precipitation\\era5_precip_19792018_mean.tif') 
+
+foobar <- list()
+
+for (i in 2002:2018) {
+  tic(paste0('Resampling burned area for year ', i))
+  
+  foo <- tmp_hotspot %>%
+    filter(year == i)
+  
+  bar <- rasterize(foo[, c('long', 'lat')], 
+                   x, 
+                   foo[, 'burnedArea'], 
+                   fun = 'first')
+  
+  baz <- resample(bar, template, method = "ngb") %>%
+    rasterToPoints() %>%
+    as_tibble() %>%
+    rename(long = 1, lat = 2, burnedArea = 3) %>%
+    mutate(year = i)
+  
+  foobar[[i]] <- baz
+  toc()
+}
+
+foobar <- bind_rows(foobar)
+
+vroom_write(foobar, './input/_modis_burnedArea_resample.csv.gz')
+```
+
+```{r geol}
+##### Summary stats from GFED dataset for geological and ecological regions
+
+### Australian geology
+geol <- read_csv('input/geology_zsfire_1997to2016.csv') %>%
+  select(-stratno, -typename, -type_uri, -repage_uri, -yngage_uri,
+         -oldage_uri, -replth_uri, -source, -metadata, -frame, 
+         -resscale, -captdate, -moddate, -featureid, -geolunitid,
+         -shape_leng, -shape_area) %>%
+  filter(!is.na(zscount))
+
+geol %>%
+  filter(zscount > 1) %>%
+  group_by(mapsymbol) %>%
+  add_tally() %>%
+  filter(n >= 30) %>%
+  ggplot(aes(x = mapsymbol, y = (zssum + 1), color = zscount, size = zscount)) +
+  geom_boxplot(alpha = 0.5) +
+  geom_jitter(alpha = 0.5) +
+  scale_y_log10() + coord_flip()
+
+geol %>%
+  filter(zscount > 1) %>%
+  ggplot(aes(x = area, y = (zsrange + 1), size = zscount)) +
+  geom_point(alpha = 0.4) +
+  scale_y_log10() + 
+  scale_x_log10() + 
+  geom_line(stat = 'smooth', method = 'loess', se = F, alpha = 0.7, color = 'grey50', size = 1)
+
+### NSW-clipped ecoregions
+
+```
+
+Todo list for handling FFMC data:
+. Read in one year of FFMC data
+. Transform into binary 1/0 of meeting or not meeting thresholds (84/91)
+.    Or mask out any values that don't meet threshold criteria (84 / 91)
+. Count annual 1s to get length of year that doesn't meet criteria
+. Consider how to best analyze and display this data:
+.    Seasonally, making comparable quarters between every region (+ maybe tropical? Positive or negative latitude values are probably the best comparison as it'll naturally develop across latitudinal gradients.
+.      Nested pie graphs via ggforce + geologic units / ecozones.
+.      Interactive: Ability to compare ecozones across world.
+.      Interactive: Start and end point on year to get immediate count of dangerous days.
+.      3D biomass rayshader input via DGVM.
+
+```{r ncdf}
+##### NetCDF data for FFMC
+### 1. Reading in a year of FFMC data.
+ffmc_dir <- 'C:/Projects/FuelMoisture/data/reanalysis/ffmc/nc/' # remember to scratch demo
+ffmc_ls <- list.files(path = ffmc_dir, pattern = '^.*\\.(nc|NC|Nc|nC)$')
+
+# open temp dataset (copy of 2016)
+foo <- nc_open(paste0( ffmc_dir, ffmc_ls[1]))
+
+# explore general metadata
+names(foo$dim)
+attributes(foo)$names
+
+print( paste('The file has', foo$nvars, 'variables,', 
+             foo$ndims, 'dimensions, and', 
+             foo$natts, 'NetCDF attributes.'))
+
+attributes(foo$var)$names
+
+# extract matrix of day data
+foo_day <- ncvar_get(foo, attributes(foo$var)$names[1]) 
+
+dim(foo_day)
+str(foo_day)
+glimpse(foo_day)
+
+attributes(foo$dim)$names
+
+foo_long <- ncvar_get(foo, 'longitude')
+foo_lat <- ncvar_get(foo, 'latitude')
+foo_z <- ncvar_get(foo, 'z')
+
+print(paste(dim(foo_lat), 'latitudes and', dim(foo_long), 'longitudes and', dim(foo_z), 'days.'))
+
+foo_day[35:37, 245:247, 1:3]
+
+dimnames(foo_day) <- list(long = foo_long, lat = foo_lat, day = foo_z)
+
+foo_day[35:37, 245:247, 1:3]
+
+foo_day <- aperm(foo_day, c(2, 1, 3))
+
+foo_day[35:37, 245:247, 1:3]
+
+# normally this is where we'd edit the time series value, but these seem to be packaged differently than is typical
+foo_atts <- ncatt_get(foo, 0)
+names(foo_atts)
+foo_atts
+
+nc_close(foo)
+
+process_ncdf <- function(files) {
+  library(lubridate)
+  library(tidyverse)
+  library(ncdf4)
+  library(reshape2)
+    season <- function(timedate, convention = "north") {
+    s_terms <- switch(convention, 
+                      "north" = c("spring", "summer", "autumn", "winter"),
+                      "south" = c("autumn", "winter", "spring", "summer"),
+                      "months" = c("MAM",    "JJA",    "SON",    "DJF"),
+                      stop("Wrong value of convention")
+    )
+    
+    m <- month(timedate)
+    s <- sapply(m, 
+                function(x) switch(x,
+                                   s_terms[4], s_terms[4],
+                                   s_terms[1], s_terms[1], s_terms[1],
+                                   s_terms[2], s_terms[2], s_terms[2],
+                                   s_terms[3], s_terms[3], s_terms[3],
+                                   s_terms[4]
+                )
+    )
+    #factor(s, levels = s_terms)
+  }
+  
+  for (i in 1:length(files)) {
+    nc_tmp <- nc_open(paste0(ffmc_dir, files[i]))
+    nc_yr <- as.numeric( 
+      regmatches( ffmc_ls[i], 
+                  gregexpr('[[:digit:]]+', ffmc_ls[i])))
+    nc_vals <- ncvar_get(nc_tmp, attributes(nc_tmp$var)$names[1])
+    nc_lat <- ncvar_get(nc_tmp, 'latitude')
+    nc_long <- ncvar_get(nc_tmp, 'longitude')
+    nc_day <- ncvar_get(nc_tmp, 'z')
+    nc_file <- substring(ffmc_ls[i], 1, nchar(ffmc_ls[i]) - 3)
+    
+    #nc_atts <- ncatt_get(nc_tmp, 0)
+    
+    nc_close(nc_tmp)
+    
+    dimnames(nc_vals) <- list(long = nc_long, lat = nc_lat, day = nc_day)
+    
+    tmp_vals_df <- melt(nc_vals, value.name = 'ffmc') %>%
+      filter(!is.na(ffmc)) %>%#, 
+             #lat %in% c(-12.25:-43.25), # switch to between() if we want to use this
+             #long %in% c(113.5:153.75)) %>%
+      mutate(fmc = 147.27 * ((101 - ffmc) / (59.5 + ffmc)),
+             year = nc_yr,
+             date = as.Date(paste0(year, '-', day), '%Y-%j'),
+             season = ifelse(lat >= 0, season(date), season(date, 'south'))) %>%
+      write_csv(., paste0(ffmc_dir, nc_file, 'global.csv'))
+    
+    #if (exists('ffmc_daily')) {
+    #  ffmc_daily <- bind_rows(ffmc_daily, tmp_vals_df) %>%
+    #    filter(!is.na(ffmc))
+    #} else {
+      #ffmc_daily <-tmp_vals_df
+    #}
+    
+    rm(nc_vals, nc_lat, nc_long, nc_tmp, nc_yr, tmp_vals_df)
+    
+  }
+  #return(ffmc_daily)
+}
+
+
+### Process on folder of choice!
+ffmc_dir <- 'C:/Projects/FuelMoisture/data/reanalysis/ffmc/'  
+ffmc_ls <- list.files(path = ffmc_dir, pattern = '^.*\\.(nc|NC|Nc|nC)$')
+process_ncdf(ffmc_ls) # DONE for Australia
+```
+
+```{r ncdf-complete}
+### Concatenate folder of csvs
+ffmc_dir <- 'C:/Projects/FuelMoisture/data/reanalysis/ffmc/'  
+fmc_ls <- list.files(path = ffmc_dir, pattern = '^.*\\.(csv)$')
+fmc_csv <- Reduce(rbind, lapply(paste0(ffmc_dir, fmc_ls), read_csv)) %>%
+  mutate(month = month(date),
+         yearx = year - min(year),
+         decade = paste0(year - (year %% 10), 's'),
+         yearLag = ifelse(month(date) == 12, year + 1, year),
+         yearxLag = yearLag - min(yearLag)) %>% 
+  filter(decade != '1970s')
+
+fmc_csv <- read_csv('C:/Projects/FuelMoisture/data/reanalysis/ffmc/ffmc_2018_global.csv') %>% # largest file -- not sure if these may have different lat-longs?
+  mutate(month = month(date),
+         long = ifelse(long > 180, long - 360, long))
+
+fmc_pnw <- list.files('C:/Projects/FuelMoisture/data/reanalysis/ffmc/done/PNW/', 
+                      '.csv', 
+                      full.names = T) %>%
+  map(function(x) { read_csv(x) }) %>%
+  reduce( rbind)
+
+#write_csv(fmc_pnw, 'fmc_pnw.csv')
+
+### getting months of lowest precipitation using ERA5 reanalysis data
+## CDO steps outside R using Cygnis shell
+## Find monthly means
+# cdo ymonmean C:/Projects/FuelMoisture/data/reanalysis/era5_precip_19792018.nc C:/Projects/FuelMoisture/data/reanalysis/era5_precip_19792018_mean.nc
+monthsDry <- stack('C:/Projects/FuelMoisture/data/reanalysis/era5_precip_19792018_mean.nc') %>%
+  rotate() %>%
+  which.min() %>%
+  rasterToPoints() %>%
+  as_tibble() %>%
+  rename(long = x, lat = y) %>%
+  filter(long %in% fmc_csv$long,
+         lat %in% fmc_csv$lat) %>%
+  mutate(layerp1 = layer + 1,
+         layerm1 = layer - 1) %>%
+  gather(layer, month, -long, -lat) %>%
+  mutate(month = ifelse(month == 0, 12, month)) %>%
+  mutate(month = ifelse(month == 13, 1, month)) %>%
+  dplyr::select(-layer) %>%
+  arrange(long, lat, month) 
+
+# adding MODIS hotspot data
+#hotspot <- read_sf('C:\\Projects\\FuelMoisture\\data\\gis\\input\\fire_archive_M6_86364.shp') %>%
+#  as_tibble() %>%
+#  dplyr::select(-geometry) %>%
+#  mutate(year = year(ACQ_DATE),
+#         month = month(ACQ_DATE)) %>%
+#  dplyr::select(-TRACK, -ACQ_DATE, -SATELLITE, -INSTRUMENT, -VERSION, #-TYPE) %>%
+#  rename(lat = LATITUDE,
+#         long = LONGITUDE,
+#         brightness = BRIGHTNESS,
+#         scan = SCAN,
+#         time = ACQ_TIME,
+#         conf = CONFIDENCE,
+#         timeOfDay = DAYNIGHT,
+#         bright_t31 = BRIGHT_T31,
+#         frp = FRP)
+hotspot <- read_csv('C:\\Projects\\FuelMoisture\\data\\analysis\\input\\modis_aus.csv') %>%
+  mutate(lat = -(abs(lat) - (abs(lat) %% 0.25)), 
+         long = (long - (long %% 0.25)))
+hotspot <- monthsDry %>%
+  inner_join(hotspot, by = c('long', 'lat', 'month')) %>%
+  group_by(lat, long, year) %>% 
+  mutate(frp_sum = sum(frp),
+         frp_n = n()) %>%
+  ungroup() %>%
+  dplyr::select(lat, long, year, frp_sum, frp_n) %>% 
+  unique()
+
+### Adding bioregions
+ibra <- sf::read_sf('C:\\Projects\\FuelMoisture\\data\\gis\\input\\IBRA7_regions_states.shp') %>%
+  filter(stateID != 0)
+#geol <- sf::read_sf('C:\\Projects\\FuelMoisture\\data\\gis\\input\\GeologicUnitPolygons1M.shp') %>% # broken atm
+#  mutate(geolID = as.numeric(group_indices(., PLOTSYMBOL)),
+#         lithID = as.numeric(group_indices(., LITHOLOGY)),
+#         geolAgeID = as.numeric(group_indices(., GEOLHIST)))
+tnc <- sf::read_sf('C:\\Projects\\FuelMoisture\\data\\gis\\input\\tnc_terr_ecoregions.shp') %>%
+  mutate(ecoID = as.numeric(group_indices(., WWF_MHTNAM)))
+template <- raster::raster('C:\\Projects\\FuelMoisture\\data\\reanalysis\\era5_precip_19792018_mean.tif') #%>% 
+#                           setExtent(., extent(ibra))
+#template <- raster('C:\\Projects\\FuelMoisture\\data\\gis\\input\\era5_resolution.tif')
+
+## fire history data
+fh_qld <- read_sf('C:\\Projects\\FuelMoisture\\data\\analysis\\input\\fireFullHistory_QLD.shp') %>%
+  st_transform(4326) %>%
+  rename(fireType = Type,
+         year = OutYear) %>%
+  mutate(month = month(IgnitionDa),
+         fireType = ifelse(fireType == 'WF', 'Wildfire', 'Prescribed burn')) %>%
+  dplyr::select(year, month, fireType) %>%
+  filter(fireType == 'Wildfire',
+         year %in% c(1980:2019)) %>% # n.b. QLD data is limited to 2016!!!
+  dplyr::select(year) %>%
+  arrange(year)
+fh_vic <- read_sf('C:\\Projects\\FuelMoisture\\data\\analysis\\input\\fireFullHistory_VIC.shp') %>%
+  st_transform(4326) %>%
+  rename(fireType = FIRETYPE,
+         year = SEASON) %>%
+  mutate(month = month(START_DATE),
+         fireType = ifelse(fireType == 'BUSHFIRE', 'Wildfire', 'Prescribed burn')) %>%
+  dplyr::select(year, month, fireType) %>%
+  filter(fireType == 'Wildfire',
+         year %in% c(1980:2019)) %>%
+  dplyr::select(year) %>%
+  arrange(year)
+fh_sa <- read_sf('C:\\Projects\\FuelMoisture\\data\\analysis\\input\\fireFullHistory_SA.shp') %>%
+  st_transform(4326) %>%
+  rename(fireType = INCIDENTTY, year = FIREYEAR) %>%
+  mutate(month = month(FIREDATE), 
+         fireType = ifelse(fireType == 'Bushfire', 'Wildfire', str_to_sentence(fireType))) %>%
+  dplyr::select(year, month, fireType) %>%
+  filter(fireType == 'Wildfire',
+         year %in% c(1980:2019)) %>%
+  dplyr::select(year) %>%
+  arrange(year)
+fh_nsw <- read_sf('C:\\Projects\\FuelMoisture\\data\\analysis\\input\\fireFullHistory_NSW.shp') %>%
+  st_transform(4326) %>%
+  mutate(fireType = str_extract(Label, '[:alpha:]+'),
+         fireType = ifelse(fireType == 'Wildfire', 
+                           fireType, 'Prescribed burn'),
+         month = month(StartDate), 
+         year = year(StartDate)) %>% 
+  dplyr::select(year, month, fireType) %>%
+  filter(fireType == 'Wildfire',
+         year %in% c(1980:2019)) %>%
+  dplyr::select(year) %>%
+  arrange(year)
+fh_tas <- read_sf('C:\\Projects\\FuelMoisture\\data\\analysis\\input\\fireFullHistory_TAS_MN.shp') %>% # Mercy's
+  st_transform(4326) %>%
+  rename(year = YEAR) %>% # YEAR may represent fire-out date rather than ignition date
+  mutate(fireType = ifelse(IGN_CAUSE1 == 'Planned Burn', 'Prescribed burn', 'Wildfire')) %>% # no month data here
+  dplyr::select(year, fireType) %>%
+  filter(fireType == 'Wildfire',
+         year %in% c(1980:2019)) %>% 
+  dplyr::select(year) %>%
+  arrange(year)
+#fh_tas <- read_sf('C:\\Projects\\FuelMoisture\\data\\analysis\\input\\fireFullHistory_TAS.shp') %>% # Grant's file
+#  st_transform(4326) %>%
+#  mutate(geometry = st_make_valid(geometry),
+#         year = year(IGN_DATE),
+#         month = month(IGN_DATE),
+#         fireType = ifelse(IGN_CAUSE1 == 'Planned Burn', 'Prescribed burn', 'Wildfire')) %>%
+#  dplyr::select(year, month, fireType) %>%
+#  filter(fireType == 'Wildfire',
+#         year %in% c(1980:2019)) %>% # limited to 2017!!!!
+#  dplyr::select(year) %>%
+#  arrange(year)
+
+fh_dir <- 'C:\\Projects\\FuelMoisture\\data\\analysis\\input\\NAFI\\'
+fh_ls <- list.files(fh_dir, '^.*\\.(shp)$')
+fh_want <- Reduce(rbind, lapply(paste0(fh_dir, fh_ls), read_sf)) %>%
+  st_transform(4326) %>%
+  rename(month = Month) %>%
+  mutate(fireType = 'Wildfire') %>% #'Tropical' 
+  dplyr::select(year)
+  
+fh_aus <- rbind(fh_qld, fh_nsw, fh_sa, fh_vic, fh_tas, fh_want) %>%
+  mutate(geometry = st_make_valid(geometry)) %>%
+  group_by(year) %>% 
+  summarize(n = n())# %>%
+ # mutate(geometry = st_make_valid(geometry))
+
+fh_ls_split <- list.files(paste0(fh_dir, '\\split\\'), '^.*\\.(shp)$')
+for (i in seq_len(nrow(fh_aus))) {
+  #a <- rasterize(fh_aus[i,], templatea, 'year', 'first')
+  b <- rasterize(fh_aus[i,], templateb, 'year', 'first')
+  c <- rasterize(fh_aus[i,], templatec, 'year', 'first')
+  d <- rasterize(fh_aus[i,], templated, 'year', 'first')
+  #writeRaster(a, paste0(fh_dir, '\\split\\a', 1979 + i, '.tif'), overwrite = TRUE)
+  writeRaster(b, paste0(fh_dir, '\\split\\b', 1979 + i, '.tif'), overwrite = TRUE)
+  writeRaster(c, paste0(fh_dir, '\\split\\c', 1979 + i, '.tif'), overwrite = TRUE)
+  writeRaster(d, paste0(fh_dir, '\\split\\d', 1979 + i, '.tif'), overwrite = TRUE)
+}
+
+#for (i in seq_len(nrow(fh_aus))) {
+#  fname <- paste0(fh_dir, '\\split\\', 1979 + i, '.shp')
+#  write_sf(fh_aus[i,], fname)
+#}
+
+# template resolution = [32,41]
+# x2 -> [64, 82]
+# x3 -> [128, 164] # seems best from test year
+# x4 -> [256, 328]
+templatea <- raster(ncols = 82, nrow = 64, crs = projection(template), ext = extent(template))
+templateb <- raster(ncols = 164, nrow = 128, crs = projection(template), ext = extent(template))
+templatec <- raster(ncols = 328, nrow = 256, crs = projection(template), ext = extent(template))
+templated <- raster(ncols = 656, nrow = 512, crs = projection(template), ext = extent(template))
+
+# n.b. this worked and was completed 16-10-2019
+#fh_ls_split <- list.files(paste0(fh_dir, '\\split\\'), '^.*\\.(shp)$')
+#for (i in 1:length(fh_ls_split)) {
+#  v <- read_sf(paste0(fh_dir, '\\split\\', fh_ls_split[i])) %>%
+#    mutate(uid = as.numeric(row.names(.))) %>%
+#    st_transform(4326)
+#  r <- rasterize(v, templatea, 'uid', 'first')
+#  writeRaster(r, paste0(fh_dir, '\\split\\', as.numeric(gsub('.shp', '', fh_ls_split[i])), 'a.tif'), overwrite = TRUE)
+#}
+
+fh_st <- list.files(paste0(fh_dir, '\\split\\'), 
+                      pattern = '(d).*\\.tif', full.names = T) %>% 
+  stack()
+
+fh_st <- stack(fh_ls) %>%
+  rasterToPoints() %>%
+  as_tibble() %>% 
+  gather(file, fire, -x, -y) %>%
+  rename(long = x, lat = y) %>%
+  mutate(date = as.Date( paste0( as.character( as.numeric( 
+    gsub('[^[:digit:]]', '', file)) - 41000000), '01'), '%Y%m%d'),
+         month = month(date),
+         year = year(date)) %>%
+  dplyr::select(-file, -date)
+ 
+# current error in sf library requires redefining this before we can nest as_tibble(sf) objects
+#vec_proxy.sfc <- function(x, ...) {
+#  x
+#}
+
+#foo <- tmp %>% 
+#  as_tibble() %>%
+#  group_by(year) %>%
+#  nest() 
+#%>%
+  #mutate(rast = map(data, rasterize, template2, 'uid', 'first'))
+#
+  #rasterToPoints() %>% 
+  #as_tibble() 
+
+
+## Ecoregions IBRA-7
+ibraRegion <- raster::rasterize(ibra, template, field = 'REC_ID', fun = 'first') %>%
+  rasterToPoints() %>%
+  as_tibble() %>%
+  rename(long = x, lat = y, regionID = layer) %>%
+  merge(read_csv('C:\\Projects\\FuelMoisture\\data\\analysis\\input\\bioregionIDs_stateIDs.csv') %>%
+          dplyr::select(REG_CODE_7, REG_NAME_7, REC_ID), 
+        by.x = 'regionID', by.y = 'REC_ID') %>%
+  as_tibble() %>%
+  unique() %>%
+  dplyr::select(-regionID) %>%
+  rename(regionID = REG_CODE_7,
+         regionName = REG_NAME_7)
+
+## State boundaries IBRA-7
+ibraState <- rasterize(ibra, template, field = 'stateID', fun = 'first') %>%
+  rasterToPoints() %>%
+  as_tibble() %>%
+  rename(long = x, lat = y, stateID = layer) %>%
+  merge(read_csv('C:\\Projects\\FuelMoisture\\data\\analysis\\input\\bioregionIDs_stateIDs.csv') %>% 
+          dplyr::select(stateID, STA_CODE) %>% 
+          unique(), 
+        by = 'stateID') %>%
+  as_tibble() %>%
+  dplyr::select(-stateID) %>%
+  rename(stateID = STA_CODE)
+
+## Geology -- CAN'T GET IT TO WORK :(
+# columns: lithology, plotsymbol, geolhist
+#geolLith <- rasterize(geol, template, field = 'geolID', fun = 'first') %>%
+#  rasterToPoints() %>%
+#  as_tibble()
+
+## TNC Ecoregions
+tncRegion <- rasterize(tnc, template, field = 'ecoID', fun = 'first') %>%
+  rasterToPoints() %>%
+  as_tibble() %>%
+  rename(long = x, lat = y, ecoID = layer) %>%
+  merge(tnc[,c('ecoID', 'WWF_MHTNAM')], by = 'ecoID') %>%
+  dplyr::select(-ecoID, -geometry) %>%
+  rename(ecoID = WWF_MHTNAM) %>%
+  unique() %>% 
+  as_tibble()
+
+```
+
+
+```{r global-processing}
+library(tidyverse)
+library(furrr)
+library(tictoc)
+library(fs)
+
+process_global <- function() {
+  
+  tncRegion <- read_csv('./input/tncGlobal.csv')
+  monthsDry <- read_csv('./input/monthsDry.csv')# %>%
+  # left_join(read_csv('./input/era5_gridArea.csv') %>% 
+  #             dplyr::select(-monthDry), 
+  #           by = c('lat', 'long'))
+  
+  fmc_dir <- 'C:\\Projects\\FuelMoisture\\data\\reanalysis\\ffmc\\'
+  fmc_ls <- list.files(fmc_dir, pattern=".csv", full.names=F)
+  
+  plan(multiprocess)
+  
+  for (i in 1:length(fmc_ls)) {
+    fmc <- read_csv(paste0(fmc_dir, fmc_ls[i])) %>%
+      mutate(month = month(date),
+             long = ifelse(long > 180, long - 360, long))
+    
+    fmc <- monthsDry %>%
+      merge(fmc, 
+            by = c('long', 'lat', 'month')) %>%
+      #  merge(ibraRegion, by = c('long', 'lat')) %>%
+      #  merge(ibraState, by = c('long', 'lat')) %>%
+      merge(tncRegion, by = c('long', 'lat')) %>%
+      as_tibble() #%>%
+    #mutate(fmcFlag = ifelse(fmc <= 8, 1, 0)) %>% # customize!
+    fmc <- fmc %>%
+      group_by(long, lat, year) %>% #, month) %>%
+      mutate(fmc_median = median(fmc),
+             fmc_mean = mean(fmc),
+             fmc_var = var(fmc),
+             fmc_sd = sd(fmc),
+             fmc_min = min(fmc),
+             fmc_max = max(fmc),
+             fmc_range = range(fmc)[2] - range(fmc)[1],
+             #ffmc_med = median(ffmc),
+             ffmc_mean = mean(ffmc),
+             ffmc_min = min(ffmc),
+             ffmc_max = max(ffmc)) %>%#,
+      #fmc_prop = (sum( ifelse(fmc <= 8, 1, 0)) / length(date)),
+      #fmc_threshold = 8) %>%
+      #ffmc_var = var(ffmc),
+      #ffmc_sd = sd(ffmc)) %>%
+      dplyr::select(-day, -ffmc, -season) %>%#, -yearLag, -yearxLag) %>% #, -fmcFlag, -month, -fmc, -date) %>%
+      unique()
+    
+    for (j in 1:32) {
+      foo <- fmc %>% 
+        group_by(long, lat, year) %>%
+        mutate(fmc_prop = (sum(ifelse(fmc <= j, 1, 0)) / length(date)),
+               fmc_threshold = j) %>%
+        ungroup() %>%
+        #group_by(long, lat, year, month) %>%
+        #mutate(fmc_prop_m = (sum(ifelse(fmc <= i, 1, 0)) / length(date)),
+        #       fmc_threshold = i) %>%
+        #ungroup() %>%
+        dplyr::select(-date, -fmc, -month) %>% 
+        unique() #%>%
+      #write_csv(paste0('fmc_prop_', i, '.csv'))
+      
+      if (exists('bar')) {
+        bar <- bind_rows(bar, foo)
+      } else {
+        bar <- foo
+      }
+      
+    }
+    
+    write_csv(bar, paste0(fmc_dir, 'global\\summary_', fmc_ls[i]))
+    
+    rm(foo); rm(bar); rm(fmc)
+    
+  }
+}
+
+### Now that the global dataset is completed, let's combine it all!
+library(tidyverse)
+library(fs)
+library(vroom)
+library(furrr)
+files <- dir_ls(path = 'C:/Projects/FuelMoisture/data/reanalysis/ffmc/global/', glob = '*csv')
+plan(multiprocess)
+tic()
+foo <- vroom(files)
+toc()
+library(tictoc)
+tic()
+foo <- vroom('C:/Projects/FuelMoisture/data/reanalysis/ffmc/fmc_global.csv.gz')
+toc()
+
+files <- dir_ls(path = 'C:\\Projects\\FuelMoisture\\data\\analysis\\input\\fmc_global\\', glob = '*csv')
+for (i in 1:length(files)) { 
+  files[i] %>% 
+    vroom() %>% 
+    vroom_write(paste0(files[i], '.gz')) 
+}
+
+files <- dir_ls(path = 'C:\\Projects\\FuelMoisture\\data\\analysis\\input\\fmc_global\\', glob = '*csv.gz')
+for (i in 1:length(files)) { 
+  tic()
+  tmp <- files[i] %>% 
+    vroom()
+  toc()
+  files[i]
+  rm(tmp)
+  }
+#
+# tmp <- read_csv('./fmc_monthly_noprop.csv') 
+#tmp2 <- read_csv('./fmc_monthly_prop.csv') 
+#
+#tmp3 %>%
+#  rename(fmc_prop = fmc_prop_m,
+#         fmc_median = fmc_med_m,
+#         fmc_mean = fmc_mean_m,
+#         fmc_var = fmc_var_m,
+#         fmc_sd = fmc_sd_m,
+#         fmc_min = fmc_min_m,
+#         fmc_max = fmc_max_m,
+#         fmc_range = fmc_range_m,
+#         ffmc_mean = ffmc_mean_m,
+#         ffmc_min = ffmc_min_m,
+#         ffmc_max = ffmc_max_m) %>%
+#  write_csv('ffmc_monthly_final.csv')
+
+fmc_monthly <- fmc_csv %>%
+  merge(ibraRegion, by = c('long', 'lat')) %>%
+  merge(ibraState, by = c('long', 'lat')) %>%
+  merge(tncRegion, by = c('long', 'lat')) %>%
+  as_tibble() %>%
+  group_by(long, lat, month, year) %>%
+  mutate(fmc_prop5 = (sum(ifelse(fmc <= 5, 1, 0)) / length(date)),
+         fmc_prop8 = (sum(ifelse(fmc <= 8, 1, 0)) / length(date)),
+         fmc_prop10 = (sum(ifelse(fmc <= 10, 1, 0)) / length(date)),
+         fmc_prop12 = (sum(ifelse(fmc <= 12, 1, 0)) / length(date)),
+         fmc_prop17 = (sum(ifelse(fmc <= 17, 1, 0)) / length(date)),
+         fmc_prop26 = (sum(ifelse(fmc <= 26, 1, 0)) / length(date)),
+         fmc_mean = mean(fmc),
+         fmc_min = min(fmc),
+         fmc_max = max(fmc),
+         fmc_range = range(fmc)[2] - range(fmc)[1],
+         ffmc_max = max(ffmc)) %>%
+  dplyr::select(-day, -ffmc, -fmc, -date, -season, -yearLag, -yearxLag) %>%
+  unique()
+
+```
+
+```{r region-plots}
+##### bypass all data creation above from ncdf-complete!!!
+fmc_ann <- read_csv('C:\\Projects\\FuelMoisture\\data\\analysis\\shiny\\fmc\\input\\fmc_annual.csv') 
+fmc_mon <- read_csv('C:\\Projects\\FuelMoisture\\data\\analysis\\shiny\\fmc\\fmc_monthly.csv') 
+
+ggplot(fmc_csv %>% 
+               filter(date == '1980-01-01', 
+                      !is.na(fmc)), 
+       aes(x = long, y = lat))+
+    geom_sf(data = filter(world_sf, 
+                          SOVEREIGNT == 'Australia', 
+                          TYPE == 'Country'), 
+            aes(x = LON, y = LAT), 
+            fill = 'grey60', color = 'black', 
+            size = 0.5/.pt, alpha = 0.9)  + 
+  geom_point(shape = 'square', color = 'white', size = 3) + 
+  geom_point(data = fmc, 
+             aes(x = long, y = lat, color = ecoID), 
+             shape = 'square', size = 3) + 
+  theme_void() + 
+  theme(plot.background = element_rect(fill = "grey10"))
+
+fmc %>%
+#  ggplot(aes(x = year, y = fmc_ds, color = fmc_ds)) + 
+  ggplot(aes(x = year, y = fmc_ds * 100)) + 
+  theme_minimal_grid() +
+  theme(axis.text.x = element_text(size = 11)) + 
+  scale_x_continuous(breaks = c(1980, 1990, 2000, 2010)) + 
+  geom_jitter(alpha = 0.05) +
+  geom_line(se = F, stat = "smooth", method = "lm", formula = y ~ splines::bs(x, 3), 
+            alpha = 0.8, color = 'hotpink', size = 1.75) + 
+#  geom_line(se = F, stat = "smooth", method = "lm", alpha = 0.6, color = 'black', size = 1) + 
+  scale_color_viridis_c(option = 'B', direction = 1) + 
+  labs(x = 'Year', y = 'Percent', subtitle = 'Proportion of 3-month dry season < 8% FMC') +
+  facet_grid((abs(lat - lat %% 3)) ~ (long - long %% 10))
+
+fmc %>% 
+  filter(long >= 145, lat <= -41) %>%
+  ggplot(aes(x = as.factor(year), y = fmc_ds)) + 
+  theme_minimal_grid() + 
+  geom_boxplot() + 
+  geom_jitter(alpha = 0.01) + 
+  theme(axis.text.x = element_text(angle = -90, hjust = 1)) +
+  stat_summary(fun.y = mean, shape = 23, geom = "point") + 
+  facet_grid(abs(lat) ~ long)
+#  facet_grid((abs(lat - lat %% 5)) ~ (long - long %% 10))
+
+fmc %>%
+  ggplot(aes(x = long, y = lat, color = fmc_ds)) +
+  geom_sf(data = filter(world_sf, 
+                        SOVEREIGNT == 'Australia', 
+                        TYPE == 'Country'), 
+          aes(x = LON, y = LAT), 
+          fill = 'white', color = 'black', 
+          size = 0.5/.pt, alpha = 0.9) +
+  geom_point(size = 3, shape = 'square', alpha = 0.15) +
+  scale_color_viridis_c(option = 'B', direction = 1) + 
+  theme_minimal_grid() + 
+  ylim(-44, -10) + xlim(113, 154) +
+  #ylim(-43, -25) + xlim(140, 154) +
+  labs(x = 'Longitude', y = 'Latitude', color = 'Proportion \n< threshold',
+       subtitle = '') + 
+  facet_wrap(~decade)
+
+fmc %>%
+#  ggplot(aes(x = year, y = fmc_ds, color = fmc_ds)) + 
+  ggplot(aes(x = year, y = fmc_ds * 100, color = ecoID)) + 
+  theme_minimal_grid() +
+  theme(axis.text.x = element_text(size = 11)) + 
+  scale_x_continuous(breaks = c(1980, 1990, 2000, 2010)) + 
+  geom_jitter(alpha = 0.05) +
+  geom_line(se = F, stat = "smooth", method = "lm", formula = y ~ splines::bs(x, 3), 
+            alpha = 0.8, size = 1.75) + 
+#  geom_line(se = F, stat = "smooth", method = "lm", alpha = 0.6, color = 'black', size = 1) + 
+  #scale_color_viridis_c(option = 'B', direction = 1) + 
+  labs(x = 'Year', y = 'Percent', subtitle = 'Proportion of 3-month dry season < 8% FMC') +
+  facet_grid((abs(lat - lat %% 3)) ~ (long - long %% 10))
+
+fmc %>%
+  filter(stateID %in% c('NSW', 'TAS'), year >= 2010) %>%
+#  ggplot(aes(x = year, y = fmc_ds, color = fmc_ds)) + 
+  ggplot(aes(x = year, y = fmc_ds * 100)) + 
+  theme_minimal_grid() +
+  theme(axis.text.x = element_text(size = 11),
+        legend.position = 'bottom',
+        strip.text.x = element_text(size = 5, face = "bold")) + 
+  scale_x_continuous(breaks = c(1980, 1990, 2000, 2010)) + 
+  geom_jitter(alpha = 0.05) +
+  geom_line(aes(group = as.factor(abs(lat - lat %% 5))), color = 'grey20', se = F, stat = "smooth", method = "lm", 
+            alpha = 0.6, size = 1.5) + 
+#  geom_line(aes(color = as.factor(abs(lat - lat %% 5))), se = F, stat = "smooth", method = 'loess', 
+#            alpha = 0.8, size = 1.75) + 
+  geom_line(aes(color = as.factor(abs(lat - lat %% 5))), se = F, stat = "smooth", method = "lm", formula = y ~ splines::bs(x, 3), 
+            alpha = 0.8, size = 1.75) + 
+  scale_color_viridis_d(option = 'B', direction = 1) + 
+  labs(x = 'Year', y = 'Percent', color = 'Latitudinal \ngradient', 
+       subtitle = 'Proportion of 3-month dry season < 8% FMC') +
+  facet_grid(stateID ~ ecoID)
+
+### playground
+#foo <- raster('input/temp_ffmc2016_fmctransform_1.tif') %>%
+#  raster::rotate() # transform 0-360 to -180-180
+
+# foo %>% writeRaster('temp_ffmc2016_fmctransform_1_rotate.tif')
+
+#foo <- read_csv('input/ecoregion_gfed97to16_fmc20160101.csv')
+
+#foo %>% 
+#  ggplot(aes(x = fmccount, y = fmcmean, color = WWF_MHTNAM)) + 
+#  geom_point(alpha = 0.3) + 
+#  geom_smooth(method = 'lm') + 
+#  geom_hline(yintercept = 10) + 
+#  scale_x_log10() + 
+#  facet_wrap(~WWF_MHTNAM)
+
+### possible tools to extract and portray as geospatial pixels
+tmp <- fmc %>% 
+  filter(year == 2013) %>% 
+  dplyr::select(long, lat, fmc_prop)
+tmp2 <- SpatialPixelsDataFrame(tmp[c('long', 'lat')], tmp)
+ggplot() + gg(tmp2, aes(x = long, y = lat, fill = fmc_prop))
+
+```
+
+```{r postgresql}
+tmp.pw <- ',*60vtsz'
+library(RPostgreSQL)
+library(tictoc)
+tmp.drv <- dbDriver('PostgreSQL')
+tmp.con <- dbConnect(tmp.drv,
+                     dbname = 'postgres',
+                     host = 'localhost',
+                     port = 5432,
+                     user = 'postgres',
+                     password = tmp.pw)
+rm(tmp.pw)
+
+tic()
+tmp.table <- vroom('C:/Projects/FuelMoisture/data/analysis/shiny/dead-fine-fuel-moisture-australia/input/fmc_australia.csv.gz')
+toc() # 1.04 minutes
+
+tmp.table_a <- vroom('C:/Projects/FuelMoisture/data/analysis/shiny/dead-fine-fuel-moisture-australia-2.0/input/fmc_australia.csv.gz')
+tmp.table_b <- vroom('C:\\Projects\\FuelMoisture\\data\\analysis\\shiny\\dead-fine-fuel-moisture-australia-2.0\\input\\ffmc_australia.csv.gz')
+
+dbWriteTable(tmp.con, 'fmc_global_oversize',
+             value = foo, append = TRUE, row.names = FALSE)
+
+tic()
+tmp.table_pg <- dbGetQuery(tmp.con, 
+                           'SELECT * FROM fmc_australia')
+toc() # 8.13 minutes
+
+# 1. read in full dataset
+foo <- vroom('C:/Projects/FuelMoisture/data/reanalysis/ffmc/fmc_global.csv.gz')
+# 2. extract fmc_global.csv.gz
+bar <- foo %>%
+  dplyr::select(long, lat, year, ecoID, fmc_prop, fmc_threshold)
+vroom_write(bar, 'fmc_global.csv.gz')
+# 3. extract ffmc_global.csv.gz
+rm(bar)
+bar <- foo %>%
+  dplyr::select(-fmc_prop, -fmc_threshold) %>%
+  unique()
+vroom_write(bar, 'ffmc_global.csv.gz')
+
+```
+
+
+```{r fixing-dry-months}
+library(tidyverse)
+library(lubridate)
+library(vroom)
+library(fs)
+
+for (i in 1980:2018) {
+  foo <- read_csv(paste0('P:/fmc/ffmc-csv/ffmc_', i, '_global.csv')) %>%
+    mutate(month = month(date)) %>%
+    dplyr::select(lat, long, date, month, fmc) %>%
+    group_by(lat, long, month) %>%
+    mutate(n = n()) %>%
+    ungroup() %>%
+    group_by(month) %>%
+    filter(n == max(n)) %>%
+    ungroup()
+  
+  for (j in 1:12) {
+    bar <- foo %>%
+      filter(month == j) %>%
+      dplyr::select(-n, -month) %>%
+      vroom_write(paste0('C:/Projects/FuelMoisture/data/reanalysis/ffmc/dryseason/fullMonths_', j, '_', i, '.csv.gz'))
+    
+  }
+  rm(foo)
+  rm(bar)
+}
+
+
+# once done, need to combine each month's 40-year record
+# apply the same method to ensure each coordinate consistently covers the full month over 40 years
+
+for (i in 10:12) {
+  files <- dir_ls(path = 'C:/Projects/FuelMoisture/data/reanalysis/ffmc/dryseason/', glob = paste0('^*fullMonths_', i, '_', '*.csv.gz'))
+  
+  foo <- vroom(files) 
+  
+  if (i == 2) {
+    bar <- foo %>%
+      # re-add month length data 
+      mutate(year = year(date)) %>%
+      mutate(monthLength = 28) %>% # force to ignore 29
+      group_by(lat, long, monthLength) %>%
+      # getbar full coverage of month over time series
+      summarise(tsLength = n()) %>% 
+      ungroup()
+  } else {
+    bar <- foo %>%
+      # re-add month length data 
+      mutate(year = year(date)) %>%
+      group_by(lat, long, year) %>%
+      mutate(monthLength = n()) %>%
+      ungroup() %>%
+      group_by(lat, long, monthLength) %>%
+      # get full coverage of month over time series
+      summarise(tsLength = n()) %>% 
+      ungroup()
+  }
+  
+  baz <- foo %>%
+    inner_join(bar, by = c('long', 'lat')) %>%
+    filter((tsLength / monthLength) >= 30) %>%
+    # get mean fmc for each month per point
+    group_by(lat, long) %>%
+    summarise(fmc_avg = mean(fmc)) %>% # mutate(fmc_avg = mean(fmc)) %>%
+    ungroup() %>%
+    mutate(month = i)
+  
+  baz %>%
+    # removed after replacing mutate() with summarise() above
+    #mutate(month = month(date)) %>%
+    #dplyr::select(lat, long, month, fmc_avg) %>%
+    #distinct() %>% 
+    vroom_write(paste0('C:/Projects/FuelMoisture/data/reanalysis/ffmc/dryseason/fullMonths30YrAvg_', i, '.csv.gz'))
+  
+}
+
+# testing output
+tmp <- vroom('C:/Projects/FuelMoisture/data/reanalysis/ffmc/dryseason/1_1983.csv.gz') 
+
+foo %>%
+  group_by(lat, long, month(date)) %>%
+  filter(month(date) == 1) %>%
+  mutate(n = n()) %>%
+  ungroup() %>%
+  filter(n == max(n)) %>%
+  dplyr::select(-date, -fmc) %>%
+  unique() %>%
+  view()
+
+
+tmp %>%
+  group_by(lat, long) %>%
+  mutate(n = n()) %>%
+  ungroup() %>%
+  dplyr::select(n) %>%
+  group_by(n) %>%
+  mutate(sum = n()) %>%
+  unique() %>%
+  view()
+
+# 3. Rasterizing (maybe) and finding month of minimum FMC
+
+files <- dir_ls(path = 'C:/Projects/FuelMoisture/data/reanalysis/ffmc/dryseason/', glob = paste0('^*fullMonths30YrAvg', '*.csv.gz'))
+
+#tmp <- vroom('C:/Projects/FuelMoisture/data/reanalysis/ffmc/dryseason/fullMonthsAvg_1.csv.gz')
+tmp <- vroom(files)
+
+foo <- tmp %>%
+  group_by(lat, long) %>%
+  summarise(fmc_min = min(fmc_avg)) %>%
+  left_join(tmp, by = c('long', 'lat')) %>%
+  filter(fmc_avg == fmc_min) %>%
+  #ungroup() %>% group_by(lat, long) %>% summarise(n = n()) # 1:1!
+  dplyr::select(-fmc_min) %>%
+  mutate(long = ifelse(long > 180, long - 360, long))
+
+foo %>%
+  #mutate(color = as.factor(month)) %>%
+  ggplot(aes(x = long, y = lat, color = month)) +
+  geom_point() +
+  theme_classic() +
+  scale_color_gradientn(colors = rev(brewer.pal(11, 'RdBu'))) + 
+  theme(panel.background = element_rect(fill = "#4E5D6C"), #4E5D6C or #2B3E50
+        plot.background = element_rect(fill = '#4E5D6C'),
+        legend.background = element_rect(fill = "#4E5D6C"),
+        strip.background = element_rect(fill = '#2B3E50'),
+        panel.grid = element_line(color = '#2B3E50'),
+        axis.title = element_text(colour = "grey85", size = 22),
+        axis.title.x = element_text(margin = margin(t = 10)),
+        axis.title.y = element_text(margin = margin(r = 10, l = 10)),
+        axis.text = element_text(color = 'grey65', size = 16),
+        legend.position = 'bottom',
+        legend.text = element_text(color = 'grey65', size = 14),
+        legend.title = element_text(color = 'grey85', size = 15),
+        strip.text = element_text(color = 'grey65', size = 16))
+
+bar <- foo %>% 
+  mutate(long = ifelse(long > 180, long - 360, long)) %>%
+  dplyr::select(long, lat, month)
+bar <- SpatialPixelsDataFrame(bar[c('long', 'lat')], bar)
+
+ggplot() +
+  geom_sf(data = world_sf, fill = 'hotpink', color = 'black', size = 0.5/.pt, alpha = 0.3) +
+  gg(bar, aes(x = long, y = lat, fill = month)) +
+  scale_fill_gradientn(colors = rev(brewer.pal(11, 'RdBu'))) +
+  theme_classic() + 
+  theme(panel.background = element_rect(fill = "#4E5D6C"), #4E5D6C or #2B3E50
+        plot.background = element_rect(fill = '#4E5D6C'),
+        legend.background = element_rect(fill = "#4E5D6C"),
+        strip.background = element_rect(fill = '#2B3E50'),
+        panel.grid = element_line(color = '#2B3E50'),
+        axis.title = element_text(colour = "grey85", size = 22),
+        axis.title.x = element_text(margin = margin(t = 10)),
+        axis.title.y = element_text(margin = margin(r = 10, l = 10)),
+        axis.text = element_text(color = 'grey65', size = 16),
+        legend.position = 'bottom',
+        legend.text = element_text(color = 'grey65', size = 14),
+        legend.title = element_text(color = 'grey85', size = 15),
+        strip.text = element_text(color = 'grey65', size = 16))
+
+
+```
+
+```{r burned-area}
+modis_base <- 'C:/Projects/FuelMoisture/data/analysis/input/modis/burned_area/'
+modis_output <- paste0(modis_base, 'shapefiles/')
+for (i in 1:24) {
+  modis_window <- paste0('Win', str_pad(i, 2, pad = '0'), '/')
+  for (j in 2000:2018) {
+    modis_folder <- paste0(modis_base, modis_window, j, '/')
+    modis_files <- fs::dir_ls(modis_folder, glob = '*.tar.gz')
+    for (k in 1:length(modis_files)) {
+      untar(modis_files[k], exdir = paste0(modis_output, j, '/'))
+    }
+  }
+}
+```
+
+```{r stripe_plots}
+fmc_daily <- read_csv('C:\\Projects\\FuelMoisture\\data\\analysis\\shiny\\fmc\\input\\fmc.csv')
+fmc_monthly <- read_csv('C:\\Projects\\FuelMoisture\\data\\analysis\\shiny\\fmc\\fmc_monthly.csv') 
+
+theme_strip <- theme_minimal()+
+                 theme(axis.text.y = element_blank(),
+                       axis.line.y = element_blank(),
+                       axis.title = element_blank(),
+                       panel.grid.major = element_blank(),
+                       legend.title = element_blank(),
+                       legend.position = 'right',
+                       axis.text.x = element_text(vjust = 3),
+                       panel.grid.minor = element_blank(),
+                        plot.title = element_text(size = 14, face = "bold")
+                       )
+col_strip <- brewer.pal(11, "RdBu")
+
+
+
+fmc %>% filter(#stateID == 'New South Wales',
+         threshold == 8) %>%
+  mutate(date = ymd(str_c(year, "01-01", sep = "-")),
+         lat_long = str_c(lat, long, sep = '-'),
+         response = fmc_prop) %>%
+  group_by(long, lat) %>%
+  mutate(response_s = scale(response)) %>%
+  ungroup() %>%
+  group_by(lat,year) %>%
+  mutate(response_lat = mean(response)) %>%
+  ungroup() %>%
+  group_by(lat) %>%
+  mutate(response_lat_s = scale(response_lat)) %>%
+  ungroup() %>%
+  group_by(lat, ecoIDy, year) %>%
+  mutate(response_lat_eco = mean(response)) %>%
+  ungroup() %>%
+  group_by(lat, ecoIDy) %>%
+  mutate(response_lat_eco_s = scale(response_lat_eco)) %>%
+  ungroup() %>%
+  group_by(stateID, ecoIDy, year) %>%
+  mutate(response_eco = mean(response)) %>%
+  ungroup() %>%
+  group_by(stateID, ecoIDy) %>%
+  mutate(response_eco_s = scale(response_eco)) %>%
+  ungroup() %>%
+  group_by(stateID, year) %>%
+  mutate(response_st = mean(response)) %>%
+  ungroup() %>%
+  group_by(stateID) %>%
+  mutate(response_st_s = scale(response_st)) %>%
+  ungroup() %>%
+  ggplot(aes(x = date, y = 1, fill = response_st_s))+
+  geom_tile()+
+  scale_x_date(date_breaks = "6 years",
+               date_labels = "%Y",
+               expand = c(0, 0))+
+  scale_y_continuous(expand = c(0, 0))+
+  scale_fill_gradientn(colors = rev(col_strip))+
+  guides(fill = guide_colorbar(barwidth = 1))+
+  labs(title = "Tasmania dry season 1980-2018",
+       caption = "")+theme_bw() +
+  theme_strip + 
+#  facet_grid(ecoIDy ~ .) 
+#  facet_grid(ecoIDy ~ stateID)
+  facet_grid(stateID ~ .)
+  #facet_grid(abs(lat) ~ ecoIDy)
+
+fmc_monthly %>% 
+  filter(stateID %in% c('TAS'),
+         fmc_threshold == 32) %>%
+  mutate(date = ymd(str_c(year, month, "01", sep = "-")),
+         lat_long = str_c(lat, long, sep = '-'),
+         response = fmc_prop) %>%
+  group_by(long, lat) %>%
+  mutate(response_s = scale(response)) %>%
+  ungroup() %>%
+  group_by(lat, year, month) %>%
+  mutate(response_lat = mean(response)) %>%
+  ungroup() %>%
+  group_by(lat) %>%
+  mutate(response_lat_s = scale(response_lat)) %>%
+  ungroup() %>%
+  group_by(lat, ecoIDy, year, month) %>%
+  mutate(response_lat_eco = mean(response)) %>%
+  ungroup() %>%
+  group_by(lat, ecoIDy) %>%
+  mutate(response_lat_eco_s = scale(response_lat_eco)) %>%
+  ungroup() %>%
+  group_by(stateID, ecoIDy, year, month) %>%
+  mutate(response_eco = mean(response)) %>%
+  ungroup() %>%
+  group_by(stateID, ecoIDy) %>%
+  mutate(response_eco_s = scale(response_eco)) %>%
+  ungroup() %>%
+  group_by(stateID, year, month) %>%
+  mutate(response_st = mean(response)) %>%
+  ungroup() %>%
+  group_by(stateID) %>%
+  mutate(response_st_s = scale(response_st)) %>%
+  ungroup() %>%
+  group_by(stateID, ecoIDy, month) %>%
+  mutate(response_eco_mo_s = scale(response_eco)) %>%
+  ungroup() %>%
+  ggplot(aes(y = factor(month), x = 1, fill = response_lat_s))+
+  geom_tile()+
+ # scale_x_date(date_breaks = "6 years",
+#               date_labels = "%Y",
+#               expand = c(0, 0))+
+  scale_x_continuous(expand = c(0, 0))+
+  scale_fill_gradientn(colors = rev(col_strip))+
+  guides(fill = guide_colorbar(barwidth = 1))+
+  labs(title = "Tasmania dry season 1980-2018",
+       caption = "")+
+  theme_strip + 
+#  facet_grid(ecoIDy ~ .) 
+#  facet_grid(ecoIDy ~ stateID)
+  #facet_grid(ecoIDy ~ year) +
+  facet_grid(abs(lat) ~ year) +
+  theme_minimal()+
+  theme(#axis.text.y = element_blank(),
+        axis.line.y = element_blank(),
+        axis.title = element_blank(),
+        panel.grid.major = element_blank(),
+        legend.title = element_blank(),
+        legend.position = 'right',
+        axis.text.x = element_text(vjust = 3),
+        panel.grid.minor = element_blank(),
+        plot.title = element_text(size = 14, face = "bold")
+  )
+
+
+```
+
+```{r gams-bioregion}
+fmc.gam <- fmc %>%
+  filter(threshold == 8) %>%
+  gam(fmc_mean ~
+        s(yearx, lat) + # s(lat) + s(long) +
+        te(long, lat),
+      data = .,
+      method = 'REML')
+
+summary(fmc.gam); AIC(fmc.gam)
+
+gam.check(fmc.gam)
+
+plot.gam(fmc.gam,
+         residuals = T, 
+         shade = T, 
+         pages = 1, 
+         all.terms = T, 
+         rug = T, 
+         pch = 1, 
+         cex = 1, 
+         shade.col = 'lightblue', 
+         seWithMean = T, 
+         shift = coef(fmc.gam)[1])
+
+
+```
+
+```{r}
+# annual or decadal proportion
+bar <- foo %>%
+  dplyr::select(-ffmc, -day) %>%
+  filter(decade != '1970s') %>%
+  group_by(long, lat, month) %>%
+  mutate(fmc_monSummary = (sum(fmc_thresh) / length(date)),
+         rank_monSummary = dense_rank(desc(fmc_monSummary))) %>%
+  ungroup() %>%
+  group_by(long, lat, year, month) %>%
+  mutate(fmc_monPrp = (sum(fmc_thresh) / length(date)),
+         fmc_monCt = sum(fmc_thresh)) %>%
+  ungroup() %>%
+  group_by(long, lat, year2, season) %>%
+  mutate(fmc_seaPrp = (sum(fmc_thresh) / length(date)),
+         fmc_seaCt = sum(fmc_thresh)) %>%
+  ungroup() %>%
+  group_by(long, lat, year) %>%
+  mutate(fmc_annPrp = (sum(fmc_thresh) / length(date)),
+         fmc_annCt = sum(fmc_thresh)) %>%
+  ungroup() %>%
+  group_by(long, lat, decade) %>%
+  mutate(fmc_decPrp = (sum(fmc_thresh) / length(date)),
+         fmc_decCt = sum(fmc_thresh)) %>%
+  ungroup() %>%
+  group_by(long, lat, decade, season) %>%
+  mutate(fmc_dec_seaPrp = (sum(fmc_thresh) / length(date)),
+         fmc_dec_seaCt = sum(fmc_thresh)) %>%
+  ungroup() %>%
+  group_by(long, lat, decade, month) %>%
+  mutate(fmc_dec_monPrp = (sum(fmc_thresh) / length(date)),
+         fmc_dec_monCt = sum(fmc_thresh)) %>%
+  ungroup() %>%
+  dplyr::select(-fmc, -date, -fmc_thresh) %>%
+  unique()
+
+
+bar %>%
+#  filter(fmc_dec_sea >= 0.7) %>%
+  ggplot(aes(x = long, y = lat, color = fmc_dec_mon)) +
+  geom_sf(data = filter(world_sf, 
+                        SOVEREIGNT == 'Australia', 
+                        TYPE == 'Country'), 
+          aes(x = LON, y = LAT), 
+          fill = 'white', color = 'black', 
+          size = 0.5/.pt, alpha = 0.9) +
+  geom_point(size = 3, shape = 'square') +
+  scale_color_viridis_c(option = 'B', direction = 1) + 
+  theme_classic() + 
+  theme_minimal_grid() + 
+  ylim(-43, -10) + xlim(113, 154) +
+  #ylim(-43, -25) + xlim(140, 154) +
+  labs(x = 'Longitude', y = 'Latitude', color = 'Proportion \n< threshold',
+       subtitle = '') + 
+  facet_grid(month ~ decade)
+
+```
+
+```{r mod}
+
+##### location-based modeling
+bar <- foo %>% 
+  group_by(lat, long, year2, season) %>%
+#  mutate(fmc_mean = mean(fmc)) %>%
+  ungroup() %>%
+  dplyr::select(-day, -date, -ffmc) %>%
+  as_tibble() %>%
+  unique()
+
+baz <- bar %>%
+  dplyr::select(long, lat, year, fmc_ann) %>%
+  arrange(lat, long, year) %>%
+  mutate(yearx = year - min(year)) %>%
+  group_by(lat, long) %>%
+  mutate(fmc_delta = fmc_ann - 
+           data.table::shift(fmc_ann, type = 'lead')) %>%
+  ungroup() %>% 
+  group_by(lat, long) %>%
+  mutate(fmc_delta_avg = mean(fmc_delta, na.rm = T)) %>%
+  unique()
+
+gam.ann <- baz %>%
+  gam((fmc_ann) ~
+        s(yearx) + s(lat) + s(long) +
+        te(lat, long, yearx),
+      data = .,
+      method = 'REML') 
+
+
+
+summary(gam.ann); AIC(gam.ann)
+# s(yearx) + s(lat) + s(long) + te(lat, long, yearx) : -52813.14
+# s(yearx) + te(long, lat, yearx) : -46993.49
+# s(yearx) + s(lat) + te(lat, long, yearx) : -47485.35
+# s(yearx) + s(long, lat) + ti(long, lat, yearx) : -46148.18
+# s(yearx) + te(long, lat) : -46034.64
+
+gam.check(gam.ann)
+
+plot.gam(gam.ann,
+         residuals = T, 
+         shade = T, 
+         pages = 1, 
+         all.terms = T, 
+         rug = T, 
+         pch = 1, 
+         cex = 1, 
+         shade.col = 'lightblue', 
+         seWithMean = T, 
+         shift = coef(gam.ann)[1])
+
+vis.gam(gam.ann, view = c('lat', 'yearx'), theta = 150, too.far = 0.1 )
+
+```
+
+```{r sensslope}
+foobar <- baz %>%
+  group_by(lat, long) %>%
+  nest() %>%
+  mutate(ts = map(data, ts, start = 1980)) %>%
+  mutate(sens = map(ts, sens.slope)) %>% 
+  mutate(sens = map(sens, glance)) %>%
+  unnest(sens)
+
+foobar %>%
+  ggplot(aes(x = long, y = lat, color = statistic, alpha = p.value)) +
+  geom_sf(data = filter(world_sf, 
+                        SOVEREIGNT == 'Australia', 
+                        TYPE == 'Country'), 
+          aes(x = LON, y = LAT), 
+          fill = 'white', color = 'black', 
+          size = 0.5/.pt, alpha = 0.9) +
+  geom_point(size = 3, shape = 'square') +
+  scale_color_viridis_c(option = 'B', direction = 1) + 
+  scale_alpha(trans = 'reverse') +
+  theme_classic() + 
+  theme_minimal_grid() + 
+  ylim(-43, -10) + xlim(113, 154) +
+  #ylim(-43, -25) + xlim(140, 154) +
+  labs(x = 'Longitude', y = 'Latitude', color = 'Annual change (%)',
+       title = 'Annual shifts in fine fuel moisture', 
+       subtitle = 'Sen\'s slope estimate for % of year < 8% FMC')
+
+```
+
+```{r}
+
+loc.mod <- function(df, x = fmc_min) {
+  
+  gam(x ~
+        s(yearx) +#, by = season) + 
+       # season +
+        te(lat, long),
+      data = df)
+}
+
+loc.mod <- function(df) {  
+#  gls(fmc_mean ~ 
+#  lme(fmc_mean ~
+#  lme(fmc ~
+#  lm(fmc_mean ~
+  lm(fmc ~
+        yearx,
+#      random = ~ 1 | yearx,
+#      random = ~ day | yearx,
+#      correlation = corAR1(form = ~ yearx),
+      data = df)
+}
+
+loc.run <- baz %>%
+  #group_by(season) %>%
+  nest() %>%
+  mutate(model = map(data, loc.mod)) %>%
+  mutate(resid = map2(data, model, add_residuals),
+         pred = map2(data, model, add_predictions),
+         aug = map(model, augment),
+         tidy = map(model, tidy),
+         glance = map(model, glance))
+
+loc.resid <- unnest(loc.run, resid) %>%
+  dplyr::select(-data, -model, -pred, -aug, -tidy, -glance)
+loc.pred <- unnest(loc.run, pred) %>%
+  dplyr::select(-data, -model, -resid, -aug, -tidy, -glance)
+loc.aug <- unnest(loc.run, aug) %>%
+  dplyr::select(-data, -model, -resid, -pred, -tidy, -glance)
+loc.tidy <- unnest(loc.run, tidy) %>% 
+  dplyr::select(-data, -model, -resid, -pred, -aug, -glance)
+loc.glance <- unnest(loc.run, glance) %>%
+  dplyr::select(-data, -model, -resid, -pred, -aug, -tidy)
+```
+
+```{r modelplots}
+##### ggplot
+loc.resid %>%
+  ggplot(aes(year, resid)) +
+  geom_line(aes(group = interaction(lat, long)), alpha = 1/3) +
+  theme_bw() + 
+  ylab('Residuals') +
+  xlab('Year') +
+  labs(color = 'Season') +
+  geom_smooth(method = 'loess', se = F, aes(group = season, color = season)) +
+  facet_wrap(~season)
+
+loc.pred %>%
+  ggplot(aes(year, pred)) +
+  geom_line(aes(group = interaction(lat, long)), alpha = 0.15) +
+  theme_bw() +
+  ylab('Predicted values') + 
+  xlab('Year') +
+  labs(color = 'Season') +
+  geom_smooth(method = 'loess', se = F, aes(group = season, color = season))
+
+loc.resid %>%
+  filter(decade >= 1980) %>%
+  ggplot(aes(x = as.factor(decade), y = resid, group = decade, color = as.factor(decade))) + 
+  geom_boxplot(position = position_dodge(0.1)) +
+  theme_bw() +
+  ylab('Residuals') +
+  xlab('Decade') +
+  labs(color = 'Decade') +
+  facet_wrap(~season)
+
+loc.pred %>%
+  filter(decade >= 1980) %>%
+  ggplot(aes(x = as.factor(decade), y = pred, group = decade, color = as.factor(decade))) + 
+  geom_hline(yintercept = c(10, 8), size = 1, alpha = 0.5) +
+  geom_boxplot(position = position_dodge(0.1)) +
+  theme_bw() +
+  ylab(expression(hat(FMC))) +
+  xlab('Decade') +
+  labs(color = 'Decade') +
+  facet_wrap(~season) +
+  scale_y_log10()
+
+loc.aug %>%
+  ungroup() %>%
+  ggplot(aes(.fitted, .resid)) +
+  geom_point(data = loc.aug %>% ungroup() %>% dplyr::select(-season), aes(.fitted, .resid), alpha = 0.05) +
+  geom_hline(yintercept = 0, alpha = 0.4, size = 1.3) +
+  geom_point(alpha = 0.15, aes(color = season)) +
+  theme_bw() + 
+  xlab(expression(hat(FMC))) +
+  ylab('Residuals') + 
+  facet_wrap(~season)
+
+loc.tidy %>%
+#  filter(term != '(Intercept)') %>% # also consider filtering latitudes
+#  filter(lat >= -20) %>%
+  ungroup() %>%
+  mutate(season = factor(season, levels = c('spring', 'summer', 'autumn', 'winter')),
+         lat_grad = lat - lat %% 10,
+         long_grad = long - long %% 10) %>%
+  ggplot(aes(x = season, y = estimate, color = season)) +
+  geom_hline(yintercept = 0, alpha = 0.4, size = 1.3) +
+  geom_boxplot(position = position_dodge(1)) +
+  theme_bw() + 
+  facet_grid(term ~ lat_grad, scales = 'free') +
+  stat_summary(fun.y = mean, shape = 23, geom = 'point', position = position_dodge(1)) +
+  labs(x = 'Season', y = 'Slope estimate')
+
+loc.tidy %>%
+  ungroup() %>%
+  filter(term != '(Intercept)', estimate <= 0, p.value <= 0.1) %>% # also consider estimate <= 0
+#  dplyr::select(-group, -level) %>%
+  unique() %>%
+  mutate(season = factor(season, levels = c('spring', 'summer', 'autumn', 'winter'))) %>%
+  ggplot(aes(x = long, y = lat, color = estimate)) +
+  geom_sf(data = filter(world_sf, SOVEREIGNT == 'Australia', TYPE == 'Country'), 
+          aes(x = LON, y = LAT), fill = 'white', color = 'black', size = 0.5/.pt, alpha = 0.9) +
+  geom_jitter(size = 3, shape = 'square') +
+  scale_color_viridis_c(option = 'B', direction = -1) + 
+  scale_alpha(trans = 'reverse') +
+  theme_classic() + 
+  facet_grid(.~season) + 
+  theme_minimal_grid() + ylim(-43, -10) + xlim(113, 154) +
+  labs(x = 'Longitude', y = 'Latitude', color = 'Slope \nestimate',
+       subtitle = 'Annual shift in fine fuel moisture content (1979-2018)')
+
+#ggsave('Australia_fmc~yearx_slopes_negonly_alphab.png', dpi = 720, width = 18, height = 11.5, unit = 'in')
+
+loc.glance %>%
+  merge(filter(loc.tidy[,c(1:5)]), by = c('long', 'lat', 'season')) %>%
+  ungroup() %>%
+  filter(estimate <= 0, term != '(Intercept)') %>%
+  unique() %>%
+  mutate(season = factor(season, levels = c('spring', 'summer', 'autumn', 'winter'))) %>%
+  ggplot(aes(x = long, y = lat, color = estimate, alpha = adj.r.squared)) +
+  theme_minimal_grid() +
+  geom_sf(data = filter(world_sf, SOVEREIGNT == 'Australia', TYPE == 'Country'),
+          aes(x = LON, y = LAT), fill = 'white', color = 'black', size = 0.5/.pt, alpha = 0.9) +
+  geom_point(size = 3, shape = 'square') +
+  scale_color_viridis_c(option = 'B', direction = -1) +
+#  scale_alpha(trans = 'reverse') +
+  facet_grid(.~season) +
+  ylim(-43, -10) +
+  xlim(113, 154) +
+  labs(x = 'Longitude', y = 'Latitude', color = 'Slope \nestimate', alpha = bquote('Adj. R'^2),
+       subtitle = 'Annual shift in seasonal fine fuel moisture')
+```
+
+```{r correlation}
+# inputs
+ecoID <- vroom('./input/_ecoIDGlobal.csv.gz')
+fmc <- vroom('./input/fmc_global_sp_v2.csv.gz')
+#fmc <- vroom('./input/ffmc_global_v2_wide.csv.gz')
+modis_ba <- vroom('./input/_modis_burnedArea_resample.csv.gz')
+modis_frp <- vroom('./input/_modis_frp.csv.gz')
+
+### Study region: Tasmania
+fmc_tas <- fmc %>% 
+  filter(between(lat, -45, -39), between(long, 140, 150)) %>%
+  left_join(ecoID) %>%
+  left_join(modis_ba) %>%
+  left_join(modis_frp) %>%
+  replace_na( list( burnedArea = 0,
+                    frp_n = 0,
+                    frp_sum = 0,
+                    frp_mean = 0))
+
+### Study region: WA + OR
+fmc_pnw <- fmc %>% 
+  filter(between(lat, 37.5, 52.5), between(long, -125, -110)) %>%
+  left_join(ecoID) %>%
+  left_join(modis_ba) %>%
+  left_join(modis_frp) %>%
+  replace_na( list( burnedArea = 0,
+                    frp_n = 0,
+                    frp_sum = 0,
+                    frp_mean = 0))
+
+### Study region: NSW + Victoria
+fmc_nsw <- fmc %>%
+  filter(between(lat, -39, -27),
+         between(long, 140, 154)) %>%
+  left_join(ecoID) %>%
+  left_join(modis_ba) %>%
+  left_join(modis_frp) %>%
+  replace_na( list( burnedArea = 0,
+                    frp_n = 0,
+                    frp_sum = 0,
+                    frp_mean = 0))
+
+### dynamic: rename to whatever dataset we want to process...
+tmp <- fmc_nsw
+
+### using cor()
+# n.b. cor() does not provide diagnostic statistics
+foo <- list()
+for(i in 1:32) {
+#  foo[[i]] <- fmc_tas %>%
+  foo[[i]] <- tmp %>%
+    group_by(lat, long, ecoID) %>%
+    rename(foobar = paste0('thresh', i)) %>%
+    summarise(burnedArea = cor(foobar, burnedArea,
+                        method = 'spearman'),
+              frp_n = cor(foobar, frp_n,
+                          method = 'spearman'),
+              frp_sum = cor(foobar, frp_sum,
+                            method = 'spearman'),
+              frp_mean = cor(foobar, frp_mean,
+                             method = 'spearman')) %>%
+    mutate(threshold = i)
+}  
+foo <- bind_rows(foo)
+#vroom_write(foo, 'temp_fmc_nsw_cor.csv')
+
+### The inflated zeros and ones influence the correlation values, so we want to discount those where >= 50% of the years feature as entirely 0s or 1s
+fmc01 <- tmp %>%
+  dplyr::select(-burnedArea, -frp_sum, -frp_n, -frp_mean) %>%
+  gather(threshold, proportion, -lat, -long, -year) %>%
+  group_by(lat, long, threshold, 
+           inflation = case_when(proportion == 0 ~ 'Zero',
+                                 # n.b. no days feature 1 in Tasmania
+                                 proportion == 1 ~ 'One',
+                                 TRUE ~ 'NULL')) %>%
+  summarise(n = n()) %>%
+  filter(threshold %in% paste0('thresh', c(1:32)),
+         n >= 20,
+         inflation %in% c('Zero', 'One')) %>%
+  ungroup() %>%
+  mutate(threshold = parse_number(threshold))
+
+bar <- foo %>%
+  ungroup() %>%
+  left_join(fmc01) %>%
+  filter(is.na(inflation)) %>%
+  dplyr::select(lat, long, threshold, burnedArea) %>%
+  filter(!is.na(burnedArea), burnedArea >= 0) %>%
+  arrange(lat, long, desc(burnedArea), threshold) %>%
+  group_by(lat, long) %>%
+  slice(1) %>%
+  full_join(foo %>%
+              ungroup() %>%
+              left_join(fmc01) %>%
+              filter(is.na(inflation)) %>%
+              dplyr::select(lat, long, threshold, frp_mean) %>%
+              filter(!is.na(frp_mean), frp_mean >= 0) %>%
+              arrange(lat, long, desc(frp_mean), threshold) %>%
+              group_by(lat, long) %>%
+              slice(1)) %>%
+  full_join(foo %>%
+              ungroup() %>%
+              left_join(fmc01) %>%
+              filter(is.na(inflation)) %>%
+              dplyr::select(lat, long, threshold, frp_sum) %>%
+              filter(!is.na(frp_sum), frp_sum >= 0) %>%
+              arrange(lat, long, desc(frp_sum), threshold) %>%
+              group_by(lat, long) %>%
+              slice(1)) %>%
+  full_join(foo %>%
+              ungroup() %>%
+              left_join(fmc01) %>%
+              filter(is.na(inflation)) %>%
+              dplyr::select(lat, long, threshold, frp_n) %>%
+              filter(!is.na(frp_n), frp_n >= 0) %>%
+              arrange(lat, long, desc(frp_n), threshold) %>%
+              group_by(lat, long) %>%
+              slice(1)) %>%
+  arrange(lat, long, threshold) %>%
+  ungroup()
+
+bar %>%
+  dplyr::select(long, lat, threshold, fire = frp_mean) %>%
+  mutate(threshold_group = case_when(between(threshold, 0, 8) ~ '00-08%',
+                                     between(threshold, 9, 12) ~ '09-12%',
+                                     between(threshold, 13, 17) ~ '13-17%',
+                                     between(threshold, 18, 32) ~ '18-32%')) %>%
+  ungroup() %>% 
+  filter(!is.na(fire)) %>%
+  ggplot() +
+  geom_sf(data = filter(world_sf), 
+#                        SOVEREIGNT == 'Australia', 
+#                        TYPE == 'Country'), 
+          aes(x = LON, y = LAT)) + 
+  geom_tile(aes(x = long, y = lat, 
+                fill = threshold, alpha = fire))  +
+  theme_classic() +
+  scale_fill_gradientn(colors = brewer.pal(11, 'RdBu')) +
+  ## PNW limits
+#  xlim(-125, -110) + ylim(37.5, 52.5) +
+  ## TAS limits
+#  xlim(143.5, 148.5) + ylim(-43.75, -39) +
+  ## NSW limits
+  xlim(140, 153.5) + ylim(-39, -27) +
+  labs(x = 'Longitude', y = 'Latitude',
+       fill = 'FMC \nthreshold (%)',
+       alpha = 'Spearman \ncorrelation',
+       title = 'Fuel moisture threshold correlation with MODIS hotspot data',
+       subtitle = 'Fire radiative Power (mean)')
+  
+ggsave('test_correlation_nsw_frp_mean.png', dpi = 720,
+       width = 10, height = 8.75)
+
+
+ # ggplot(aes(x = long, y = lat, color = cor)) +
+ # geom_point() +
+ # theme_classic() +
+ # scale_color_gradientn(colors = rev(brewer.pal(11, 'RdBu'))) +
+ # facet_grid(is.na(cor)~ecoID)
+ # nest() %>%
+ # mutate(cor = map(data, 
+ #                  ~ cor.test(formula = ~ .x$thresh17 + .x$frp_mean,
+ #                             #exact = TRUE,
+ #                             #continuity = TRUE,
+ #                             #alternative = 'greater',
+ #                             method = 'spearman')),
+ #        cor_t = map(cor, tidy))
+#
+```
+
+
+```{r regtree-outputs}
+
+#folder <- 'C:/Projects/FuelMoisture/data/analysis/input/'
+#fmc_thresh <- vroom(paste0(folder, 'fmc_global_regtree_v2.csv.gz'))
+#fmc_thresh <- fmc_thresh %>%
+#  dplyr::select(-c(fmc_frpm_median_err, fmc_frpm_min_err, 
+#                   fmc_ba_median_err, fmc_ba_min_err)) %>%
+#  gather(fmc_type, fmc_threshold, 
+#         -c(long, lat)) %>% 
+#  left_join(fmc_thresh %>% 
+#              dplyr::select(-c(fmc_frpm_median, fmc_frpm_min,
+#                               fmc_ba_median, fmc_ba_min)) %>%
+#              gather(fmc_type, fmc_error, 
+#                     -c(long, lat)) %>% 
+#              mutate(fmc_type = str_replace(fmc_type, '_err', ''))) %>%
+#  filter(!is.na(fmc_error)) %>%
+#  mutate(fmc_source = factor(str_extract(fmc_type, '(frpm|ba)'), 
+#                             levels = c('frpm', 'ba'),
+#                             labels = c('Fire radiative power', 'Burned area')),
+#         fmc_method = as.factor(str_to_title(str_extract(fmc_type, #'(median|min)')))) %>%
+#  dplyr::select(-fmc_type) %>%
+#  distinct()
+#
+#fmc_rt <- vroom(paste0(folder, 'fmc_global_regtree_v2_prop.csv.gz'))  %>%
+#  gather(fmc_type, fmc_prop, 
+#         -c(long, lat, year)) %>%
+#  filter(!is.na(fmc_prop)) %>%
+#  mutate(fmc_source = factor(str_extract(fmc_type, '(frpm|ba)'), 
+#                             levels = c('frpm', 'ba'),
+#                             labels = c('Fire radiative power', 'Burned area')),
+#         fmc_method = as.factor(str_to_title(str_extract(fmc_type, #'(median|min)')))) %>%
+#  dplyr::select(-fmc_type) %>%
+#  left_join(fmc_thresh)
+
+fmc_rt <- vroom('./input/fmc_global_v3.csv.gz')
+#### fuckery below
+
+fmc_rt_avg <- fmc_rt %>%
+  left_join(ecoID) %>%
+  group_by(year, ecoID) %>%
+  summarise(fmc_prop_frpm_median = mean(fmc_prop_frpm_median, na.rm = T),
+            fmc_prop_frpm_min = mean(fmc_prop_frpm_min, na.rm = T),
+            fmc_prop_ba_median = mean(fmc_prop_ba_median, na.rm = T),
+            fmc_prop_ba_min = mean(fmc_prop_ba_min, na.rm = T)) %>%
+  gather(method, fmc_prop, -year, -ecoID) %>%
+  mutate(source = case_when(str_detect(method, '_frpm_') ~ 'Fire radiative power',
+                            str_detect(method, '_ba_') ~ 'Burned area'),
+         stat = case_when(str_detect(method, '_median') ~ 'Median',
+                          str_detect(method, '_min') ~ 'Minimum'))
+
+fmc_rt_avg %>%
+  filter(year >= 1980,
+         !is.na(ecoID)) %>%
+  ggplot(aes(x = year, y = fmc_prop * 100, color = source, group = source)) +
+  theme_classic() +
+  theme(legend.position = 'bottom') +
+  geom_line(alpha = 0.4) +
+  geom_line(stat = 'smooth',
+            method = 'gam', 
+            formula = y ~ s(x, k = 7),
+            se = F,
+            size = 1.35,
+            alpha = 0.7) +
+  facet_grid(stat ~ ecoID, scales = 'free') +
+  labs(color = '',
+       y = '% of dry season',
+       x = '',
+       title = 'Average global fuel moisture-fire threshold relationships',
+       subtitle = 'Proportion of local dry seasons with fuel moisture under locally-determined thresholds') +
+  scale_color_manual(values = pal_neuromancer[c(1,3)])
+
+#ggsave('omfg.png', dpi = 720, width = 9.5, height = 7)
+ggsave('tmp.png', dpi = 720, width = 21.5, height = 18.5)
+
+fmc_rt %>%
+  filter(#year %in% c(1980, 2018),
+         fmc_source == 'Burned area',
+         #fmc_threshold <= 32,
+         fmc_method == 'Median') %>%
+  ggplot(aes(x = long, y = lat, 
+             fill = fmc_prop,
+             alpha = -fmc_threshold)) +
+  geom_tile() +
+  theme_classic() +
+  #facet_grid((fmc_threshold <= 32) ~ year) + 
+  facet_wrap(~year) +
+  scale_fill_gradientn(colors = pal_neuromancer) +
+  #xlim(-125, -115) + ylim(40, 50)
+  #coord_cartesian(xlim = c(135, 150),
+  #                ylim = c(-45, -27))
+  coord_cartesian(xlim = c(-125, -115),
+                  ylim = c(40, 50))
+
+
+fmc_dec <- fmc_rt %>%
+  mutate(decade = as.factor(year - (year %% 10))) %>%
+  group_by(lat, long, decade, fmc_source, fmc_method, fmc_threshold) %>%
+  summarise(fmc_prop = mean(fmc_prop)) 
+  
+
+```
+
+```{r regtree-playground}
+foo <- fmc_rt %>% 
+  filter(fmc_source == 'Burned area', 
+         fmc_method == 'Median', 
+         year >= 1980) %>% 
+  dplyr::select(-fmc_source, -fmc_method) %>%
+  mutate(decade = year - (year %% 10))
+
+
+## regional line-plot
+bar <- fmc_rt %>%
+  ### study area to improve processing speed
+  ## Okanogan
+  #filter(between(long, -120, -118),
+  #       between(lat, 47.5, 49.5))
+  ## BC
+  #filter(between(long, -128, -115),
+  #       between(lat, 48, 58))
+  ## PNW
+  #filter(between(long, -125, -115),
+  #       between(lat, 40, 50)) 
+  ## NSW/TAS
+  filter(between(long, 135, 155),
+         between(lat, -45, -27)) 
+  ## just TAS
+  #filter(between(long, 140, 150),
+  #       between(lat, -45, -39))
+  ## SW WA
+  #filter(between(long, 112, 121),
+  #       between(lat, -35, -28))
+  ## Spain/Portugal
+  #filter(between(long, -13, -3),
+  #       between(lat, 33, 47)) 
+  ## Brazil
+  #filter(between(long, -75, -35),
+  #       between(lat, -30, -0)) 
+
+bar %>%
+  filter(year >= 1980) %>%
+  #group_by(fmc_source, fmc_method, year) %>%
+  #summarise(fmc_prop = mean(fmc_prop)) %>%
+  ggplot(aes(x = year, y = fmc_prop * 100, 
+             color = fmc_source)) +
+  theme_classic() +
+  theme(legend.position = 'bottom') +
+  geom_point(alpha = 0.15) +
+  #geom_line() +
+  geom_line(stat = 'smooth',
+            method = 'gam', 
+            formula = y ~ s(x, k = 7),
+            se = F,
+            size = 1.35,
+            alpha = 0.7) +
+  facet_wrap(. ~ fmc_method, scales = 'free') +
+  labs(color = '',
+       y = '% of dry season',
+       x = '',
+       title = 'Average global fuel moisture-fire threshold relationships',
+       subtitle = 'Proportion of local dry seasons with fuel moisture under locally-determined thresholds') +
+  scale_color_manual(values = pal_neuromancer[c(1,3)])
+
+### map
+baz <- bar %>%
+  filter(fmc_source == 'Burned area', 
+         fmc_method == 'Median', 
+         year >= 1980) %>% 
+  dplyr::select(-fmc_source, -fmc_method) %>%
+  mutate(decade = year - (year %% 10)) %>%
+  group_by(lat, long, decade) %>%
+  summarise(fmc_prop = mean(fmc_prop),
+            fmc_threshold = unique(fmc_threshold))
+
+baz %>%
+  ggplot(aes(x = long, y = lat, 
+             fill = fmc_prop)) +
+  geom_tile() +
+  theme_classic() +
+  scale_fill_gradientn(colors = rev(pal_greeneyes)) +
+  facet_wrap(~decade)
+
+
+```
+
+```{r era5}
+#nc_folder <- 'C:/Projects/FuelMoisture/data/reanalysis/'
+#
+#nc_file <- nc_open(
+#  paste0(
+#    nc_folder, 'era5-climate.nc'))
+#
+#nc_timespan <- tibble(
+#  start = seq(1, 492, by = 12),
+#  end = seq(12, 492, by = 12)
+#)
+#
+#latlong <- vroom('C:/Projects/FuelMoisture/data/analysis/input/_monthsDry_v2.csv.g#z') %>%
+#  select(lat, long) %>%
+#  distinct()
+#
+#nc_attributes <- attributes(nc_file$var)$names
+#
+#for (i in 1:2) {#9:length(nc_attributes)) {
+#  nc_var <- nc_attributes[i]
+#  
+#  nc_lat <- ncvar_get(nc_file, 'latitude')
+#  nc_long <- ncvar_get(nc_file, 'longitude')
+#  nc_expver <- ncvar_get(nc_file, 'expver')
+#  nc_time <- ncvar_get(nc_file, 'time')
+#  
+#  nc_tibble <- list()
+#  
+#  for (j in 1:nrow(nc_timespan)) {
+#    tic(paste0('Processing ', nc_var, ': ', j + 1978))
+#    nc_start <- as.numeric(nc_timespan[j,'start'])
+#    nc_end <- as.numeric(nc_timespan[j,'end'])
+#    
+#    nc_vals <- ncvar_get(nc_file,
+#                     nc_var,
+#                     start = c(1,1,1,nc_start),
+#                     # this is literally a count, hence not using nc_end
+#                     count = c(-1,-1,-1,12))
+#    
+#    dimnames(nc_vals) <- list(long = nc_long, 
+#                          lat = nc_lat, 
+#                          expver = nc_expver,
+#                          time = nc_time[nc_start:nc_end])
+#    
+#    nc_tibble[[j]] <- melt(nc_vals, 
+#                      value.name = nc_var) %>%
+#      as_tibble() %>%
+#      right_join(latlong) %>%
+#      ## UQ(as.symbol()) <-> !! as.symbol()
+#      filter(!is.na(UQ(as.symbol(nc_var)))) %>% 
+#      mutate(time = as_datetime(c(time * 60 * 60), 
+#                                origin = '1900-01-01'),
+#             year = year(time),
+#             month = month(time)) %>%
+#      # no idea what expver is, tbh
+#      dplyr::select(-time, -expver)
+#    toc()
+#    
+#  }
+#  tic(paste0('Binding and writing ', nc_var))
+#  nc_tibble %>%
+#    bind_rows() %>%
+#    vroom_write(.,
+#                paste0(nc_folder, 
+#                       '/climate/', 
+#                       nc_var,
+#                       '.csv.gz'))
+#  toc()
+#  rm(nc_tibble)
+#}
+
+folder <- 'C:\\Projects\\FuelMoisture\\data\\reanalysis\\climate'
+files <- dir_ls(folder, glob = '*.csv.gz')
+monthsDry <- vroom('./input/_monthsDry_v2.csv.gz')
+
+# 243,170 = lat-long combinations
+tvl <- vroom(paste0(folder, '/tvl.csv.gz')) %>% 
+  dplyr::select(lat, long, tvl) %>%
+  distinct() 
+#vroom_write(tvl, paste0(folder, '/tvl_v2.csv.gz'))
+rm(tvl)
+
+tvh <- vroom(paste0(folder, '/tvh.csv.gz')) %>% 
+  dplyr::select(lat, long, tvh) %>%
+  distinct() 
+#vroom_write(tvh, paste0(folder, '/tvh_v2.csv.gz'))
+rm(tvh)
+
+slt <- vroom(paste0(folder, '/slt.csv.gz')) %>%
+  dplyr::select(lat, long, slt) %>%
+  distinct()
+#vroom_write(slt, paste0(folder, '/slt_v2.csv.gz'))
+rm(slt)
+
+cvh <- vroom(paste0(files[1])) 
+cvh %>%
+  dplyr::select(lat, long, cvh) %>%
+  distinct() %>%
+  vroom_write(., paste0(folder, '/output/cvh_v2.csv.gz'))
+rm(cvh)
+
+cvl <- vroom(files[2])
+cvl %>%
+  dplyr::select(lat, long, cvl) %>%
+  distinct() %>%
+  vroom_write(., paste0(folder, '/output/cvl_v2.csv.gz'))
+rm(cvl)
+
+tp <- vroom(paste0(folder, '/tp.csv.gz'))
+tpa <- tp %>%
+  group_by(lat, long, year) %>%
+  summarise(tp = sum(tp)) %>%
+  ungroup() %>%
+  left_join(tp %>%
+              right_join(monthsDry) %>%
+              group_by(lat, long, year) %>%
+              summarise(tpds = sum(tp)) %>%
+              ungroup())
+#vroom_write(tpa, paste0(folder, '/output/tp_v2.csv.gz'))
+rm(tpa); rm(tp)
+
+
+lai_hv <- vroom(paste0(folder, '/lai_hv.csv.gz'))
+## not really sure how to deal with this
+#lai_hv %>% 
+#  group_by(lat, long) %>% 
+#  summarise(lai_hv_max = max(lai_hv), 
+#            lai_hv_min = min(lai_hv), 
+#            lai_hv_r = lai_hv_max - lai_hv_min, 
+#            lai_hv_m = mean(lai_hv)) %>%
+#  vroom_write(paste0(folder, '/lai_hv_v2.csv.gz'))
+
+foo <- vroom(paste0(folder, '/lai_lv.csv.gz')) 
+bar <- foo %>%
+  group_by(lat, long) %>% 
+  summarise(lai_lv_max = max(lai_lv), 
+            lai_lv_min = min(lai_lv), 
+            lai_lv_r = lai_lv_max - lai_lv_min, 
+            lai_lv_m = mean(lai_lv))
+vroom_write(bar, paste0(folder, '/lai_lv_v2.csv.gz'))
+
+t2m <- vroom(paste0(folder, '/t2m.csv.gz'))
+t2ma <- t2m %>%
+  group_by(lat, long, year) %>%
+  summarise(mat = mean(t2m),
+            mhmt = max(t2m),
+            mcmt = min(t2m)) %>%
+  ungroup() %>%
+  left_join(t2m %>%
+              right_join(monthsDry) %>%
+              group_by(lat, long, year) %>%
+              summarise(mdst = mean(t2m)) %>%
+              ungroup())
+#vroom_write(t2ma, paste0(folder, '/output/t2m_v2.csv.gz'))
+rm(t2m); rm(t2ma)
+
+foo <- vroom(files[3])
+bar <- foo %>%
+  group_by(lat, long, year) %>%
+  summarise(mae = mean(e),
+            mhme = max(e),
+            mcme = min(e)) %>%
+  ungroup() %>%
+  left_join(foo %>%
+              right_join(monthsDry) %>%
+              group_by(lat, long, year) %>%
+              summarise(mdse = mean(e)) %>%
+              ungroup())
+#vroom_write(bar, paste0(folder, '/output/e_v2.csv.gz'))
+rm(foo); rm(bar)
+
+foo <- vroom(files[6])
+bar <- foo %>%
+  group_by(lat, long, year) %>%
+  summarise(mapev = mean(pev),
+            mhmpev = max(pev),
+            mcmpev = min(pev)) %>%
+  ungroup() %>%
+  left_join(foo %>%
+              right_join(monthsDry) %>%
+              group_by(lat, long, year) %>%
+              summarise(mdspev = mean(pev)) %>%
+              ungroup())
+#vroom_write(bar, paste0(folder, '/output/pev_v2.csv.gz'))
+rm(foo); rm(bar)
+
+foo <- vroom(paste0(folder, '/sf.csv.gz'))
+bar <- foo %>%
+  group_by(lat, long, year) %>%
+  summarise(sf = sum(sf)) %>%
+  ungroup() %>%
+  left_join(foo %>%
+              right_join(monthsDry) %>%
+              group_by(lat, long, year) %>%
+              summarise(sfds = sum(sf)) %>%
+              ungroup())
+vroom_write(bar, paste0(folder, '/output/sf_v2.csv.gz'))
+rm(foo); rm(bar)
+# same for sro and ssro
+foo <- vroom(paste0(folder, '/ssro.csv.gz'))
+bar <- foo %>%
+  group_by(lat, long, year) %>%
+  summarise(mssro = mean(ssro)) %>%
+  ungroup() %>%
+  left_join(foo %>%
+              right_join(monthsDry) %>%
+              group_by(lat, long, year) %>%
+              summarise(mdsssro = mean(ssro)) %>%
+              ungroup())
+vroom_write(bar, paste0(folder, '/output/ssro_v2.csv.gz'))
+rm(foo); rm(bar)
+
+foo <- vroom(paste0(folder, '/stl4.csv.gz'))
+bar <- foo %>%
+  group_by(lat, long, year) %>%
+  summarise(mastl4 = mean(stl4),
+            mhmstl4 = max(stl4),
+            mcmstl4 = min(stl4)) %>%
+  ungroup() %>%
+  left_join(foo %>%
+              right_join(monthsDry) %>%
+              group_by(lat, long, year) %>%
+              summarise(mdsstl4 = mean(stl4)) %>%
+              ungroup())
+vroom_write(bar, paste0(folder, '/output/stl4_v2.csv.gz'))
+rm(foo); rm(bar)
+
+
+```
+
+```{r studyregions}
+folder <- "C:/Projects/FuelMoisture/data/analysis/input/"
+fmc <- vroom(paste0(folder, 'fmc_global_v3.csv.gz'))
+modis <- vroom(paste0(folder, '_modis_burnedArea_resample.csv.gz')) %>%
+  left_join(vroom(paste0(folder, '_modis_frp.csv.gz')))
+dem <- vroom(paste0(folder, 'elevation.csv.gz')) %>%
+  mutate(lat = lat + 0.125,
+         long = long + 0.125)
+ecoID <- vroom('./input/_ecoIDGlobal.csv.gz') %>%
+  dplyr::select(-ecoDesc)
+
+fmc_sample <- fmc %>%
+  ### PNW
+  #filter(between(long, -125, -115),
+  #       between(lat, 40, 50)) %>%
+  ### BC
+  #filter(between(long, -135, -115),
+  #       between(lat, 48, 68)) %>%
+  ### NSW/TAS
+  #filter(between(long, 130, 150),
+  #       between(lat, -45, -27)) %>%
+  left_join(vroom(paste0(folder, 'climate/vegetation.csv.gz'))) %>%
+  left_join(vroom(paste0(folder, 'climate/tp_v2.csv.gz'))) %>%
+  left_join(vroom(paste0(folder, 'climate/t2m_v2.csv.gz'))) %>%
+  left_join(dem) %>%
+  ## Problematic? Does this replace enough NAs?
+  left_join(modis %>%
+              replace_na(list(frp_mean = 0,
+                              frp_sum = 0,
+                              frp_n = 0,
+                              burnedArea = 0))) %>%
+  mutate(slt = factor(round(slt)),
+         tvh = factor(round(tvh)),
+         tvl = factor(round(tvl)),
+         fmc_prop = fmc_prop * 100,
+         tp = tp * 1000,
+         tpds = tpds * 1000,
+         burnedArea_ln = log1p(burnedArea)) %>%
+  left_join(ecoID)
+
+
+
+### dynamic demo-writying code
+#vroom_write(fmc_sample, paste0(folder, 'sample-regions/world.csv.gz'))
+
+fmc_nsw <- vroom(paste0(folder, 'sample-regions/nsw-tas.csv.gz')) %>%
+  mutate(slt = factor(round(slt)),
+         tvh = factor(round(tvh)),
+         tvl = factor(round(tvl)),
+         fmc_prop = fmc_prop * 100,
+         tp = tp * 1000,
+         tpds = tpds * 1000,
+         burnedArea_ln = log1p(burnedArea))
+
+fmc_pnw <- vroom(paste0(folder, 'sample-regions/pnw.csv.gz')) %>%
+  #filter(fmc_method == 'Median') %>% # fmc_source == 'Burned area',
+  mutate(slt = factor(round(slt)),
+         tvh = factor(round(tvh)),
+         tvl = factor(round(tvl)),
+         fmc_prop = fmc_prop * 100,
+         tp = tp * 1000,
+         tpds = tpds * 1000,
+         burnedArea_ln = log1p(burnedArea),
+         dummyx = rnorm(nrow(.), 100, 25),
+         dummyy = rnorm(nrow(.), 200, 50),
+         dummyz = rnorm(nrow(.), 520, 195))
+
+fmc_bc <- vroom(paste0(folder, 'sample-regions/bc.csv.gz')) %>%
+  mutate(slt = factor(round(slt)),
+         tvh = factor(round(tvh)),
+         tvl = factor(round(tvl)),
+         fmc_prop = fmc_prop * 100,
+         tp = tp * 1000,
+         tpds = tpds * 1000,
+         burnedArea_ln = log1p(burnedArea))
+
+foo <- fmc_sample %>% #filter(fmc_prop > 0) %>% 
+  group_by(fmc_source, fmc_method, year) %>%
+  sample_n(5000) 
+p <- fmc_sample %>% 
+  filter(fmc_source == 'Burned area',
+           fmc_method == 'Median') %>% 
+  mutate(ecoID = ifelse(is.na(ecoID), 'Unknown', 
+                        ifelse(ecoID == 'Rock / ice', 'Tundra', ecoID))) %>%
+  filter(!is.na(burnedArea)) %>%
+  ggplot(aes(y = burnedArea + 1,
+             #color = slt,
+             #size = burnedArea_ln,
+             x = fmc_threshold)) +
+  labs(x = 'Fuel moisture content threshold (%)',
+       y = 'Burned area') + 
+  geom_vline(xintercept = c(5, 8, 12, 17, 22, 32),
+             alpha = 0.35,
+             size = 1.35) +
+  geom_hex() +
+  scale_x_log10() +
+  scale_y_log10() +
+  scale_fill_gradientn(#colors = rev(brewer.pal(11, 'RdBu')),
+                       colors = rev(pal_neuromancer[c(1,2,3)]),
+                       trans = 'log') +
+  geom_smooth(se = T, alpha = 0.35,
+            color = pal_neuromancer[1],
+            method = 'gam',
+            formula = y ~ s(x, k = 7)) +
+  facet_wrap(~ecoID) +
+  #facet_grid(fmc_method ~ fmc_source, scales = 'free') +
+  theme_classic() +
+  theme(legend.position = 'none') 
+p
+folder_fig <- 'C:/Projects/FuelMoisture/figures/'
+ggsave(paste0(folder_fig, 'hex_globe_threshlnxbaln_ecoid.png'), dpi = 720,
+       height = 8.5, width = 12.25)
+
+plot_ly(fmc_pnw,
+        x = ~mhmt,
+        y = ~tpds,
+        z = ~fmc_prop,
+        type = 'scatter3d',
+        opacity = 0.2)
+```
+
+
+```{r plane-attempts}
+plot_ly(
+  fmc_pnw %>% filter(!is.na(burnedArea)),
+  x = ~fmc_prop, 
+  y = ~burnedArea_ln, 
+  z = ~tpds, 
+  type = 'mesh3d',
+  colors = c(pal_neuromancer)
+  ) %>%
+  #add_surface()
+  #add_markers()# %>%
+  layout(
+    scene = list(xaxis = list(title = '% of dry season <= threshold'),
+        yaxis = list(title = 'Burned area'),
+        zaxis = list(title = 'Dry season precipitation'))
+        )
+  
+fmc_lm <- lm(burnedArea ~ 0 + fmc_prop * tpds + year + mhmt + elev, data = fmc_pnw %>% filter(!is.na(burnedArea)))
+
+axis_x <- seq(min(fmc_pnw$fmc_prop), max(fmc_pnw$fmc_prop), by = 0.5)
+axis_y = seq(min(fmc_pnw$tpds), max(fmc_pnw$tpds), by = 0.5)
+
+fmc_lm_surface <- expand.grid(fmc_prop = axis_x, tpds = axis_y,KEEP.OUT.ATTRS = F)
+fmc_lm_surface$burnedArea <- predict.lm(fmc_lm, newdata = fmc_lm_surface)
+fmc_lm_surface <- acast(fmc_lm_surface, fmc_prop ~ tpds, value.var = 'burnedArea')
+
+plot_ly(fmc_pnw,
+            x = ~fmc_prop,
+            y = ~tpds,
+            z = ~burnedArea,
+            type = 'scatter3d',
+            alpha = 0.35) %>%
+  add_trace(z = fmc_lm_surface,
+            x = axis_x,
+            y = axis_y,
+            type = 'surface') #%>%
+  layout(
+    scene = list(xaxis = list(title = '% of dry season <= threshold'),
+        yaxis = list(title = 'Dry season precipitation'),
+        zaxis = list(title = 'Burned area'))
+        )
+
+```

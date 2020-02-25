@@ -1,0 +1,151 @@
+"0","```r
+library(tidyverse)
+library(furrr)
+library(tictoc)
+library(fs)
+
+process_global <- function() {
+  
+  tncRegion <- read_csv('./input/tncGlobal.csv')
+  monthsDry <- read_csv('./input/monthsDry.csv')# %>%
+  # left_join(read_csv('./input/era5_gridArea.csv') %>% 
+  #             dplyr::select(-monthDry), 
+  #           by = c('lat', 'long'))
+  
+  fmc_dir <- 'C:\\Projects\\FuelMoisture\\data\\reanalysis\\ffmc\\'
+  fmc_ls <- list.files(fmc_dir, pattern=\".csv\", full.names=F)
+  
+  plan(multiprocess)
+  
+  for (i in 1:length(fmc_ls)) {
+    fmc <- read_csv(paste0(fmc_dir, fmc_ls[i])) %>%
+      mutate(month = month(date),
+             long = ifelse(long > 180, long - 360, long))
+    
+    fmc <- monthsDry %>%
+      merge(fmc, 
+            by = c('long', 'lat', 'month')) %>%
+      #  merge(ibraRegion, by = c('long', 'lat')) %>%
+      #  merge(ibraState, by = c('long', 'lat')) %>%
+      merge(tncRegion, by = c('long', 'lat')) %>%
+      as_tibble() #%>%
+    #mutate(fmcFlag = ifelse(fmc <= 8, 1, 0)) %>% # customize!
+    fmc <- fmc %>%
+      group_by(long, lat, year) %>% #, month) %>%
+      mutate(fmc_median = median(fmc),
+             fmc_mean = mean(fmc),
+             fmc_var = var(fmc),
+             fmc_sd = sd(fmc),
+             fmc_min = min(fmc),
+             fmc_max = max(fmc),
+             fmc_range = range(fmc)[2] - range(fmc)[1],
+             #ffmc_med = median(ffmc),
+             ffmc_mean = mean(ffmc),
+             ffmc_min = min(ffmc),
+             ffmc_max = max(ffmc)) %>%#,
+      #fmc_prop = (sum( ifelse(fmc <= 8, 1, 0)) / length(date)),
+      #fmc_threshold = 8) %>%
+      #ffmc_var = var(ffmc),
+      #ffmc_sd = sd(ffmc)) %>%
+      dplyr::select(-day, -ffmc, -season) %>%#, -yearLag, -yearxLag) %>% #, -fmcFlag, -month, -fmc, -date) %>%
+      unique()
+    
+    for (j in 1:32) {
+      foo <- fmc %>% 
+        group_by(long, lat, year) %>%
+        mutate(fmc_prop = (sum(ifelse(fmc <= j, 1, 0)) / length(date)),
+               fmc_threshold = j) %>%
+        ungroup() %>%
+        #group_by(long, lat, year, month) %>%
+        #mutate(fmc_prop_m = (sum(ifelse(fmc <= i, 1, 0)) / length(date)),
+        #       fmc_threshold = i) %>%
+        #ungroup() %>%
+        dplyr::select(-date, -fmc, -month) %>% 
+        unique() #%>%
+      #write_csv(paste0('fmc_prop_', i, '.csv'))
+      
+      if (exists('bar')) {
+        bar <- bind_rows(bar, foo)
+      } else {
+        bar <- foo
+      }
+      
+    }
+    
+    write_csv(bar, paste0(fmc_dir, 'global\\summary_', fmc_ls[i]))
+    
+    rm(foo); rm(bar); rm(fmc)
+    
+  }
+}
+
+### Now that the global dataset is completed, let's combine it all!
+library(tidyverse)
+library(fs)
+library(vroom)
+library(furrr)
+files <- dir_ls(path = 'C:/Projects/FuelMoisture/data/reanalysis/ffmc/global/', glob = '*csv')
+plan(multiprocess)
+tic()
+foo <- vroom(files)
+toc()
+library(tictoc)
+tic()
+foo <- vroom('C:/Projects/FuelMoisture/data/reanalysis/ffmc/fmc_global.csv.gz')
+toc()
+
+files <- dir_ls(path = 'C:\\Projects\\FuelMoisture\\data\\analysis\\input\\fmc_global\\', glob = '*csv')
+for (i in 1:length(files)) { 
+  files[i] %>% 
+    vroom() %>% 
+    vroom_write(paste0(files[i], '.gz')) 
+}
+
+files <- dir_ls(path = 'C:\\Projects\\FuelMoisture\\data\\analysis\\input\\fmc_global\\', glob = '*csv.gz')
+for (i in 1:length(files)) { 
+  tic()
+  tmp <- files[i] %>% 
+    vroom()
+  toc()
+  files[i]
+  rm(tmp)
+  }
+#
+# tmp <- read_csv('./fmc_monthly_noprop.csv') 
+#tmp2 <- read_csv('./fmc_monthly_prop.csv') 
+#
+#tmp3 %>%
+#  rename(fmc_prop = fmc_prop_m,
+#         fmc_median = fmc_med_m,
+#         fmc_mean = fmc_mean_m,
+#         fmc_var = fmc_var_m,
+#         fmc_sd = fmc_sd_m,
+#         fmc_min = fmc_min_m,
+#         fmc_max = fmc_max_m,
+#         fmc_range = fmc_range_m,
+#         ffmc_mean = ffmc_mean_m,
+#         ffmc_min = ffmc_min_m,
+#         ffmc_max = ffmc_max_m) %>%
+#  write_csv('ffmc_monthly_final.csv')
+
+fmc_monthly <- fmc_csv %>%
+  merge(ibraRegion, by = c('long', 'lat')) %>%
+  merge(ibraState, by = c('long', 'lat')) %>%
+  merge(tncRegion, by = c('long', 'lat')) %>%
+  as_tibble() %>%
+  group_by(long, lat, month, year) %>%
+  mutate(fmc_prop5 = (sum(ifelse(fmc <= 5, 1, 0)) / length(date)),
+         fmc_prop8 = (sum(ifelse(fmc <= 8, 1, 0)) / length(date)),
+         fmc_prop10 = (sum(ifelse(fmc <= 10, 1, 0)) / length(date)),
+         fmc_prop12 = (sum(ifelse(fmc <= 12, 1, 0)) / length(date)),
+         fmc_prop17 = (sum(ifelse(fmc <= 17, 1, 0)) / length(date)),
+         fmc_prop26 = (sum(ifelse(fmc <= 26, 1, 0)) / length(date)),
+         fmc_mean = mean(fmc),
+         fmc_min = min(fmc),
+         fmc_max = max(fmc),
+         fmc_range = range(fmc)[2] - range(fmc)[1],
+         ffmc_max = max(ffmc)) %>%
+  dplyr::select(-day, -ffmc, -fmc, -date, -season, -yearLag, -yearxLag) %>%
+  unique()
+
+```"

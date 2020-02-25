@@ -1,0 +1,123 @@
+"0","```r
+##### NetCDF data for FFMC
+### 1. Reading in a year of FFMC data.
+ffmc_dir <- 'C:/Projects/FuelMoisture/data/reanalysis/ffmc/nc/' # remember to scratch demo
+ffmc_ls <- list.files(path = ffmc_dir, pattern = '^.*\\.(nc|NC|Nc|nC)$')
+
+# open temp dataset (copy of 2016)
+foo <- nc_open(paste0( ffmc_dir, ffmc_ls[1]))
+
+# explore general metadata
+names(foo$dim)
+attributes(foo)$names
+
+print( paste('The file has', foo$nvars, 'variables,', 
+             foo$ndims, 'dimensions, and', 
+             foo$natts, 'NetCDF attributes.'))
+
+attributes(foo$var)$names
+
+# extract matrix of day data
+foo_day <- ncvar_get(foo, attributes(foo$var)$names[1]) 
+
+dim(foo_day)
+str(foo_day)
+glimpse(foo_day)
+
+attributes(foo$dim)$names
+
+foo_long <- ncvar_get(foo, 'longitude')
+foo_lat <- ncvar_get(foo, 'latitude')
+foo_z <- ncvar_get(foo, 'z')
+
+print(paste(dim(foo_lat), 'latitudes and', dim(foo_long), 'longitudes and', dim(foo_z), 'days.'))
+
+foo_day[35:37, 245:247, 1:3]
+
+dimnames(foo_day) <- list(long = foo_long, lat = foo_lat, day = foo_z)
+
+foo_day[35:37, 245:247, 1:3]
+
+foo_day <- aperm(foo_day, c(2, 1, 3))
+
+foo_day[35:37, 245:247, 1:3]
+
+# normally this is where we'd edit the time series value, but these seem to be packaged differently than is typical
+foo_atts <- ncatt_get(foo, 0)
+names(foo_atts)
+foo_atts
+
+nc_close(foo)
+
+process_ncdf <- function(files) {
+  library(lubridate)
+  library(tidyverse)
+  library(ncdf4)
+  library(reshape2)
+    season <- function(timedate, convention = \"north\") {
+    s_terms <- switch(convention, 
+                      \"north\" = c(\"spring\", \"summer\", \"autumn\", \"winter\"),
+                      \"south\" = c(\"autumn\", \"winter\", \"spring\", \"summer\"),
+                      \"months\" = c(\"MAM\",    \"JJA\",    \"SON\",    \"DJF\"),
+                      stop(\"Wrong value of convention\")
+    )
+    
+    m <- month(timedate)
+    s <- sapply(m, 
+                function(x) switch(x,
+                                   s_terms[4], s_terms[4],
+                                   s_terms[1], s_terms[1], s_terms[1],
+                                   s_terms[2], s_terms[2], s_terms[2],
+                                   s_terms[3], s_terms[3], s_terms[3],
+                                   s_terms[4]
+                )
+    )
+    #factor(s, levels = s_terms)
+  }
+  
+  for (i in 1:length(files)) {
+    nc_tmp <- nc_open(paste0(ffmc_dir, files[i]))
+    nc_yr <- as.numeric( 
+      regmatches( ffmc_ls[i], 
+                  gregexpr('[[:digit:]]+', ffmc_ls[i])))
+    nc_vals <- ncvar_get(nc_tmp, attributes(nc_tmp$var)$names[1])
+    nc_lat <- ncvar_get(nc_tmp, 'latitude')
+    nc_long <- ncvar_get(nc_tmp, 'longitude')
+    nc_day <- ncvar_get(nc_tmp, 'z')
+    nc_file <- substring(ffmc_ls[i], 1, nchar(ffmc_ls[i]) - 3)
+    
+    #nc_atts <- ncatt_get(nc_tmp, 0)
+    
+    nc_close(nc_tmp)
+    
+    dimnames(nc_vals) <- list(long = nc_long, lat = nc_lat, day = nc_day)
+    
+    tmp_vals_df <- melt(nc_vals, value.name = 'ffmc') %>%
+      filter(!is.na(ffmc)) %>%#, 
+             #lat %in% c(-12.25:-43.25), # switch to between() if we want to use this
+             #long %in% c(113.5:153.75)) %>%
+      mutate(fmc = 147.27 * ((101 - ffmc) / (59.5 + ffmc)),
+             year = nc_yr,
+             date = as.Date(paste0(year, '-', day), '%Y-%j'),
+             season = ifelse(lat >= 0, season(date), season(date, 'south'))) %>%
+      write_csv(., paste0(ffmc_dir, nc_file, 'global.csv'))
+    
+    #if (exists('ffmc_daily')) {
+    #  ffmc_daily <- bind_rows(ffmc_daily, tmp_vals_df) %>%
+    #    filter(!is.na(ffmc))
+    #} else {
+      #ffmc_daily <-tmp_vals_df
+    #}
+    
+    rm(nc_vals, nc_lat, nc_long, nc_tmp, nc_yr, tmp_vals_df)
+    
+  }
+  #return(ffmc_daily)
+}
+
+
+### Process on folder of choice!
+ffmc_dir <- 'C:/Projects/FuelMoisture/data/reanalysis/ffmc/'  
+ffmc_ls <- list.files(path = ffmc_dir, pattern = '^.*\\.(nc|NC|Nc|nC)$')
+process_ncdf(ffmc_ls) # DONE for Australia
+```"
