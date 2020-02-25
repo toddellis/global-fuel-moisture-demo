@@ -1,0 +1,25 @@
+{
+    "collab_server" : "",
+    "contents" : "",
+    "created" : 1582609507852.000,
+    "dirty" : false,
+    "encoding" : "UTF-8",
+    "folds" : "",
+    "hash" : "0",
+    "id" : "DD8ED1CA",
+    "lastKnownWriteTime" : 1582615126,
+    "last_content_update" : 1582615126734,
+    "path" : "C:/Projects/Shiny/global-fuel-moisture-demo/global.R",
+    "project_path" : "global.R",
+    "properties" : {
+        "cursorPosition" : "31,32",
+        "scrollLine" : "30"
+    },
+    "read_only" : false,
+    "read_only_alternatives" : [
+    ],
+    "relative_order" : 1,
+    "source_on_save" : false,
+    "source_window" : "",
+    "type" : "r_source"
+}
