@@ -23,27 +23,37 @@ shinyUI(
                leafletOutput('fmc_map')
         ),
         column(4,
-               ## Select a study area
-               pickerInput('study_area',
-                           '[ study area ]',
-                           c('SE Australia' = 'nsw',
-                             'W North America' = 'wna'),
-                           'nsw'),
                ## Select dataset: 
                ### a) 1-32 FMC threshold proportions
                ### b) locally-defined FMC thresholds & proportions
                pickerInput('input_file',
-                           '[ data type ]',
-                           c('FMC proportions' = 'fmc_prop',
-                             'FMC thresholds' = 'fmc_rt'),
-                           'fmc_rt'),
+                           '[ input file ]',
+                           c('FMC proportions (1-32%)' = 'fmc_prop',
+                             'FMC proportions (local)' = 'fmc_rt_prop',
+                             'FMC thresholds' = 'fmc_rt_thresh'),
+                           'fmc_rt_thresh'),
+               ## Select a study area
+               pickerInput('study_area',
+                           '[ study region ]',
+                           c('SE Australia' = 'nsw',
+                             'W North America' = 'wna'),
+                           'nsw'),
                ## Dynamic response variable selector
                uiOutput('ui_response_var'),
                ## Dynamic response year selector
                uiOutput('ui_response_year'),
+               hr(),
+               ## Button to update figures
+               actionButton('update_plots', 
+                            'Generate figures from selection'),
+               br(),br(),
+               ## Button to remove selection
+               ## TODO: Fix.
+               #actionButton('reset_selection',
+               #             'Reset selection'),
                ## Select an interaction variable for scatterplot
                pickerInput('interaction_var',
-                           '[ plot interaction ]',
+                           '[ scatterplot interaction variable ]',
                            c('Elevation' = 'elev',
                              'FMC threshold: Med. burned area' = 'baMedian',
                              'FMC threshold: Med. FRP' = 'frpMedian',
@@ -67,16 +77,13 @@ shinyUI(
                            'tpds'),
                ## Select a color grouping variable for scatterplot
                pickerInput('color_var',
-                           '[ plot color ]',
-                           c('None' = 'none',
+                           '[ scatterplot color variable ]',
+                           c('None (hexplot)' = 'none',
                              'Ecoregion' = 'ecoID',
                              'Soil type' = 'slt',
                              'Veg. type (high)' = 'tvh',
                              'Veg. type (low)' = 'tvl'),
-                           'none'),
-               ## Button to update figures
-               actionButton('update_plots', 
-                            'Update figures')
+                           'none')
                
         )
         

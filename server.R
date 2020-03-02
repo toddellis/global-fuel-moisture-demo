@@ -24,7 +24,7 @@ shinyServer(
       
       switch(input$input_file,
              'fmc_prop' = pickerInput('response_var',
-                                      '[ response ]',
+                                      '[ mapping variable ]',
                                       c('FMC 1%' = 'thresh1',
                                         'FMC 2%' = 'thresh2',
                                         'FMC 3%' = 'thresh3',
@@ -58,13 +58,20 @@ shinyServer(
                                         'FMC 31%' = 'thresh31',
                                         'FMC 32%' = 'thresh32'),
                                       'thresh12'),
-             'fmc_rt' = pickerInput('response_var',
-                                    '[ response ]',
+             'fmc_rt_thresh' = pickerInput('response_var',
+                                    '[ mapping variable ]',
                                     c('Med. FMC / burned area' = 'baMedian',
                                       'Med. FMC / FRP' = 'frpMedian',
                                       'Min. FMC / burned area' = 'baMin',
                                       'Min. FMC / FRP' = 'frpMin'),
-                                    'baMedian'))
+                                    'baMedian'),
+             'fmc_rt_prop' = pickerInput('response_var',
+                                           '[ mapping variable ]',
+                                           c('Med. FMC / burned area' = 'baMedian',
+                                             'Med. FMC / FRP' = 'frpMedian',
+                                             'Min. FMC / burned area' = 'baMin',
+                                             'Min. FMC / FRP' = 'frpMin'),
+                                           'baMedian'))
     })
     
     output$ui_response_year <- renderUI({
@@ -73,14 +80,17 @@ shinyServer(
       
       switch(input$input_file,
              'fmc_prop' = pickerInput('response_year',
-                                      '[ year ]',
-                                      c(1979:2018),
+                                      '[ mapping year ]',
+                                      c(1980:2018),
                                       2018),
-             'fmc_rt' = pickerInput('response_year',
-                                    '[ year ]',
-                                    c('Summary (NULL)' = 2020, 
-                                      1979:2018),
-                                    'Summary (NULL)')
+             'fmc_rt_prop' = pickerInput('response_year',
+                                         '[ mapping year ]',
+                                         c(1980:2018),
+                                         2018),
+             'fmc_rt_thresh' = pickerInput('response_year',
+                                    '[ mapping year ]',
+                                    c('None: FMC thresholds' = 2020),
+                                    2020)
       )
       
     })
@@ -306,6 +316,11 @@ shinyServer(
         dplyr::select(long, lat) 
     })
     
+    ## How do we do a reset button?
+    #selectedLocations <- observeEvent(input$reset_selection, {
+    #  NULL
+    #})
+    #
     
     ##### Remove de-selected points from concatenation
     observeEvent(input$fmc_map_draw_deleted_features,{
@@ -499,7 +514,8 @@ shinyServer(
       p <- if(input$color_var == 'none')
         p +
         geom_hex() +
-        scale_fill_gradientn(colors = rev(pal_climate)) +
+        scale_fill_gradientn(colors = rev(pal_climate),
+                             trans = 'log') +
         theme(legend.position = 'none')
       else p +
         geom_point(alpha = 0.10) +
